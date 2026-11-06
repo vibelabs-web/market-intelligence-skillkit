@@ -120,7 +120,7 @@ def run_dir(run: str) -> Path:
 
 
 def doc_files(d: Path) -> list[str]:
-    hide = {"feedback.jsonl", "verdict.json", "run.json"}
+    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl"}
     fs = [p.name for p in sorted(d.iterdir()) if p.is_file() and p.name not in hide and not p.name.startswith(".")]
     return sorted(fs, key=lambda n: (not n.startswith("brief"), n))
 
@@ -137,6 +137,17 @@ def read_feedback(d: Path) -> list[dict]:
     if not p.exists():
         return []
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def read_suggestions(d: Path) -> list[dict]:
+    p = d / "suggestions.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def write_suggestions(d: Path, items: list[dict]) -> None:
+    (d / "suggestions.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in items), encoding="utf-8")
 
 
 def write_feedback(d: Path, items: list[dict]) -> None:
@@ -229,7 +240,7 @@ class H(BaseHTTPRequestHandler):
                 self.js({"runs": out})
             elif u.path == "/api/run":
                 d = run_dir(q["run"])
-                self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d),
+                self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d), "suggestions": read_suggestions(d),
                          "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"])})
             elif u.path == "/doc":
                 self.send(render_doc(run_dir(q["run"]) / safe(q["file"])))
@@ -260,6 +271,18 @@ class H(BaseHTTPRequestHandler):
                 d = run_dir(data["run"])
                 write_feedback(d, [x for x in read_feedback(d) if x["id"] != data["id"]])
                 self.js({"ok": True})
+            elif self.path == "/api/suggestion":
+                d = run_dir(data["run"])
+                items = read_suggestions(d)
+                s = next(x for x in items if x["id"] == data["id"])
+                s.update(state="accepted" if data.get("accept") else "rejected", reviewer=data.get("reviewer", ""), note=data.get("note", ""))
+                write_suggestions(d, items)
+                if data.get("accept"):
+                    item = {"file": s.get("file"), "quote": s.get("quote"), "comment": data.get("note") or s.get("comment"), "kind": s.get("kind", "fix"),
+                            "reviewer": data.get("reviewer", ""), "occurrence": 0, "id": uuid.uuid4().hex[:8], "from_suggestion": s["id"],
+                            "at": dt.datetime.now().isoformat(timespec="seconds")}
+                    write_feedback(d, read_feedback(d) + [item])
+                self.js(s)
             elif self.path == "/api/verdict":
                 d = run_dir(data["run"])
                 v = {"ok": bool(data.get("ok")), "reason": data.get("reason", ""), "reviewer": data.get("reviewer", ""), "at": dt.datetime.now().isoformat(timespec="seconds")}
