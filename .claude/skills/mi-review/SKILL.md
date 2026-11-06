@@ -8,7 +8,7 @@ context: fork
 # 독립 평가
 
 ## 입력
-`runs/<실행>/brief.md` · `selection.csv` · `run.json` · 해당 `project/people/<id>.md` · `project/rubric.md` · `project/fact-pack/evidence-register.csv` · `project/fact-pack/internal-data.csv`.
+`runs/<실행>/brief.md` · `selection.csv` · `run.json` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/rubric.md` · `my/lens.md` · `project/fact-pack/evidence-register.csv` · `project/fact-pack/internal-data.csv`.
 
 ## 절차
 1. 근거 ID 를 실제 행과 대조한다. 대조하지 않은 것을 맞다고 쓰지 않는다.

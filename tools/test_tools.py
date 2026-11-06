@@ -230,6 +230,38 @@ class Approval(unittest.TestCase):
     def test_removed_sentence_detected(self):
         self.assertEqual(self.rs.removed_sentences("규칙 하나. 규칙 둘.", "규칙 하나. 규칙 셋."), ["규칙 둘."])
         self.assertEqual(self.rs.removed_sentences("규칙 하나.", "규칙 하나. 규칙 셋."), [])
+    def test_guard_restores_unapproved_edit(self):
+        before = self.rs.snapshot(self.root)
+        self.f.write_text("몰래 바꿈", encoding="utf-8")
+        (self.root / "playbook/new.md").write_text("새 파일", encoding="utf-8")
+        self.assertEqual(self.rs.restore_changes(self.root, before), ["playbook/a.md", "playbook/new.md"])
+        self.assertIn("규칙 하나.", self.f.read_text(encoding="utf-8"))
+        self.assertFalse((self.root / "playbook/new.md").exists())
+    def test_guard_ignores_hook_memory(self):
+        (self.root / ".claude/memory").mkdir(parents=True); (self.root / ".claude/skills").mkdir()
+        before = self.rs.snapshot(self.root)
+        (self.root / ".claude/memory/last-session.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(self.rs.restore_changes(self.root, before), [])
+    def test_guard_quiet_when_unchanged(self):
+        self.assertEqual(self.rs.restore_changes(self.root, self.rs.snapshot(self.root)), [])
+    def test_revert_keeps_later_approval(self):
+        g = lambda *a: self.rs.git(*a, root=self.root)
+        g("init", "-q"); self.f.write_text("규칙 하나.\n\n\n\n규칙 둘.\n", encoding="utf-8")
+        self.rs.commit_paths("시작", ["playbook/a.md"], self.root)
+        self.f.write_text("규칙 하나 수정.\n\n\n\n규칙 둘.\n", encoding="utf-8")
+        first = self.rs.commit_paths("첫 승인", ["playbook/a.md"], self.root)
+        self.f.write_text("규칙 하나 수정.\n\n\n\n규칙 둘 수정.\n", encoding="utf-8")
+        self.rs.commit_paths("둘째 승인", ["playbook/a.md"], self.root)
+        self.rs.revert_commit(first, self.root)
+        self.assertEqual(self.f.read_text(encoding="utf-8"), "규칙 하나.\n\n\n\n규칙 둘 수정.\n")
+    def test_revert_conflict_changes_nothing(self):
+        g = lambda *a: self.rs.git(*a, root=self.root)
+        g("init", "-q"); self.rs.commit_paths("시작", ["playbook/a.md"], self.root)
+        self.f.write_text("A\n", encoding="utf-8"); first = self.rs.commit_paths("첫 승인", ["playbook/a.md"], self.root)
+        self.f.write_text("B\n", encoding="utf-8"); self.rs.commit_paths("둘째 승인", ["playbook/a.md"], self.root)
+        with self.assertRaises(ValueError):
+            self.rs.revert_commit(first, self.root)
+        self.assertEqual(self.f.read_text(encoding="utf-8"), "B\n")
     def test_next_run(self):
         self.assertTrue(self.rs.next_run("zz-test-01").endswith("-02"))
 

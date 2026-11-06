@@ -2,27 +2,17 @@
   "permissions": {
     "allow": [
       "Read",
-      "Edit(playbook/**)",
-      "Write(playbook/**)",
       "Edit(project/people/**)",
       "Write(project/people/**)",
-      "Edit(project/rubric.md)",
-      "Edit(my/**)",
-      "Edit(shave-log.md)",
-      "Write(shave-log.md)",
       "Write(runs/**)",
       "Edit(runs/**)",
       "Write(golden/**)",
       "Bash(python3 tools/*)",
       "Bash(git status*)",
-      "Bash(git add*)",
-      "Bash(git commit*)",
       "Bash(git rev-parse*)",
       "Bash(git log*)",
       "Bash(git diff*)",
       "Bash(mkdir*)",
-      "Write(project/**)",
-      "Edit(project/**)",
       "WebSearch",
       "WebFetch"
     ]

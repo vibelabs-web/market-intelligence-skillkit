@@ -172,13 +172,38 @@ def write_feedback(d: Path, items: list[dict]) -> None:
 
 JOBS: dict[str, dict] = {}
 JOB_LOCK = threading.Lock()
-TOOLS = ("Read,Edit(playbook/**),Write(playbook/**),Edit(project/people/**),Write(project/people/**),Edit(project/rubric.md),Edit(my/**),Edit(shave-log.md),Write(shave-log.md),"
-         "Write(runs/**),Edit(runs/**),Bash(python3 tools/*),Bash(git status*),Bash(git add*),Bash(git commit*),Bash(git rev-parse*),Bash(git log*),Bash(git diff*),Bash(mkdir*)")
+PROPOSE_TOOLS = "Read,Write(runs/{run}/proposal.json),Edit(runs/{run}/proposal.json)"
+RUN_TOOLS = "Read,Write(runs/**),Edit(runs/**),Bash(python3 tools/*),Bash(git rev-parse*),Bash(mkdir*)"
+DENY = "Edit(playbook/**),Write(playbook/**),Edit(project/**),Write(project/**),Edit(my/**),Write(my/**),Edit(tools/**),Write(tools/**),Edit(.claude/**),Write(.claude/**)"
+PROTECTED = ("playbook", "project", "my", "tools", ".claude/skills", ".claude/settings.json")   # .claude/memory 는 훅이 쓰는 곳이라 보지 않는다
 
 
-def claude_run(prompt: str) -> str:
-    cmd = ["claude", "-p", prompt, "--model", os.environ.get("MI_MODEL", "claude-sonnet-5-5"), "--permission-mode", "acceptEdits", "--allowedTools", TOOLS, "--output-format", "text"]
-    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600).stdout
+def snapshot(root: Path) -> dict[str, bytes]:
+    paths = [q for d in PROTECTED for q in ([root / d] if (root / d).is_file() else (root / d).rglob("*"))]
+    return {str(p.relative_to(root)): p.read_bytes() for p in paths if p.is_file() and "__pycache__" not in p.parts}
+
+
+def restore_changes(root: Path, before: dict[str, bytes]) -> list[str]:
+    """AI 작업 중 바뀐 보호 파일을 되돌리고 그 목록을 준다. 스킬은 승인으로만 바뀐다"""
+    after = snapshot(root)
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    for k in changed:
+        if k in before:
+            (root / k).parent.mkdir(parents=True, exist_ok=True)
+            (root / k).write_bytes(before[k])
+        else:
+            (root / k).unlink()
+    return changed
+
+
+def claude_run(prompt: str, tools: str = RUN_TOOLS) -> str:
+    cmd = ["claude", "-p", prompt, "--model", os.environ.get("MI_MODEL", "claude-sonnet-5-5"), "--allowedTools", tools, "--disallowedTools", DENY, "--output-format", "text"]
+    before = snapshot(ROOT)
+    out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600).stdout
+    changed = restore_changes(ROOT, before)
+    if changed:
+        raise RuntimeError("AI 작업이 승인 없이 파일을 고치려 해 되돌렸습니다: " + ", ".join(changed))
+    return out
 
 
 EDITABLE = ("playbook/", "project/people/", "project/rubric.md", "my/")
@@ -217,8 +242,31 @@ def apply_changes(root: Path, changes: list[dict]) -> list[str]:
     return sorted(texts)
 
 
-def git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-c", "user.name=mi-skillkit", "-c", "user.email=mi@local", *args], cwd=ROOT, capture_output=True, text=True)
+def git(*args: str, root: Path | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-c", "user.name=mi-skillkit", "-c", "user.email=mi@local", *args], cwd=root or ROOT, capture_output=True, text=True)
+
+
+def commit_paths(message: str, files: list[str], root: Path | None = None) -> str:
+    """이 파일만 커밋하고 짧은 해시를 준다. 사용자가 올려 둔 다른 변경은 함께 커밋하지 않는다"""
+    git("add", "--", *files, root=root)
+    r = git("commit", "-qm", message, "--", *files, root=root)
+    if r.returncode != 0:
+        raise RuntimeError("커밋하지 못했습니다: " + (r.stderr or r.stdout)[:200])
+    return git("rev-parse", "--short", "HEAD", root=root).stdout.strip()
+
+
+def revert_commit(commit: str, root: Path | None = None) -> None:
+    """그 승인만 되돌린다. 뒤에 승인한 다른 수정은 남긴다. 겹치면 아무것도 바꾸지 않고 알린다"""
+    r = git("revert", "--no-edit", commit, root=root)
+    if r.returncode != 0:
+        git("revert", "--abort", root=root)
+        raise ValueError("뒤에 승인한 수정과 겹쳐 되돌리지 못했습니다. 바뀐 파일은 없습니다")
+
+
+def log_shave(rows: list[str], message: str) -> None:
+    with open(ROOT / "shave-log.md", "a", encoding="utf-8") as f:
+        f.writelines(rows)
+    commit_paths(message, ["shave-log.md"])
 
 
 def next_run(run: str) -> str:
@@ -270,7 +318,7 @@ def propose_job(run: str) -> None:
     try:
         job.update(step="피드백을 자료와 대조해 수정안을 만드는 중", no=1, of=1, eta=60)
         (RUNS / run / "proposal.json").unlink(missing_ok=True)
-        out = claude_run(f"/mi-feedback {run}")
+        out = claude_run(f"/mi-feedback {run}", PROPOSE_TOOLS.format(run=run))
         if load_proposal(RUNS / run) is None:
             job.update(state="failed", error="수정안을 만들지 못했습니다. " + out[-300:])
             return
@@ -287,12 +335,8 @@ def apply_job(run: str) -> None:
         ok = [c for c in prop.get("changes", []) if c.get("decision") == "approved"]
         head = git("rev-parse", "HEAD").stdout.strip()
         files = apply_changes(ROOT, ok)
-        git("add", "--", *files)
-        git("commit", "-qm", f"{run} 피드백 승인 반영: " + " · ".join(c["id"] for c in ok))
-        commit = git("rev-parse", "--short", "HEAD").stdout.strip()
-        with open(ROOT / "shave-log.md", "a", encoding="utf-8") as f:
-            for c in ok:
-                f.write(f"| {run} | {c['file']} | {str(c.get('reason', '')).replace('|', '/')} | {','.join(map(str, c.get('from_feedback', [])))} | 승인 ({c.get('decided_by', '')}) |\n")
+        commit = commit_paths(f"{run} 피드백 승인 반영: " + " · ".join(c["id"] for c in ok), files)
+        log_shave([f"| {run} | {c['file']} | {str(c.get('reason', '')).replace('|', '/')} | {','.join(map(str, c.get('from_feedback', [])))} | 승인 ({c.get('decided_by', '')}) |\n" for c in ok], f"{run} 깎기 기록")
         person = read_json(d / "run.json", {}).get("person")
         new = next_run(run)
         before = {p.name for p in RUNS.iterdir() if p.is_dir()}
@@ -530,10 +574,8 @@ class H(BaseHTTPRequestHandler):
                     raise ValueError("되돌릴 변경이 없습니다")
                 if a.get("reverted"):
                     raise ValueError("이미 되돌렸습니다")
-                if git("checkout", a["head_before"], "--", *a["files"]).returncode != 0:
-                    raise ValueError("되돌리지 못했습니다")
-                git("add", "--", *a["files"])
-                git("commit", "-qm", f"{data['run']} 의 스킬 변경 되돌리기")
+                revert_commit(a["commit"])
+                log_shave([f"| {a.get('from_run', data['run'])} | {', '.join(a['files'])} | 되돌림 ({a['commit']}) | | 되돌림 |\n"], f"{data['run']} 의 스킬 변경 되돌리기")
                 a["reverted"] = True
                 (d / "applied.json").write_text(json.dumps(a, ensure_ascii=False), encoding="utf-8")
                 self.js(a)
