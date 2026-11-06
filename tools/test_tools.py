@@ -31,6 +31,10 @@ class Brief(unittest.TestCase):
         self.assertEqual(gates("베트남 문의는 42건입니다 (synthetic).", {"42"}), [])
     def test_synthetic_unmarked(self):
         self.assertIn("G5", gates("베트남 문의는 42건입니다 [E-001].", {"42"}))
+    def test_citation_after_period(self):
+        self.assertEqual(gates("수입은 1,234 입니다. [E-001]"), [])
+    def test_citation_not_taken_from_next_line(self):
+        self.assertIn("G1", gates("시장은 500 규모입니다.\n다음 문장입니다 [E-001]."))
     def test_year_and_list_ignored(self):
         self.assertEqual(gates("1. 2024년 자료입니다."), [])
 

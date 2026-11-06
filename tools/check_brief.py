@@ -21,18 +21,29 @@ def norm(n: str) -> str:
 
 
 def sentences(text: str) -> list[str]:
-    out = []
+    out: list[str] = []
+    fresh = False
     for line in text.splitlines():
         line = line.strip()
-        if line and not line.startswith("#") and not re.fullmatch(r"[|:\-\s]+", line):
-            out += [s.strip() for s in re.split(r"(?<=[.!?다요])\s+", line) if s.strip()]
+        if not line or line.startswith("#") or re.fullmatch(r"[|:\-\s]+", line):
+            continue
+        line = re.sub(r"^(?:[-*]|\d+[.)])\s+", "", line)              # 목록 표시
+        for s in re.split(r"(?<=[.!?])\s+", line):
+            s = s.strip()
+            if not s:
+                continue
+            if out and fresh and re.fullmatch(r"(?:\[?E-\d{3}\]?[\s,.·]*)+", s):   # 문장 뒤에 따로 놓인 근거 표시
+                out[-1] += " " + s
+            else:
+                out.append(s)
+            fresh = True
+        fresh = False
     return out
 
 
 def bare_numbers(s: str) -> list[str]:
     s = ID.sub(" ", s)
-    s = re.sub(r"\b20\d\d(?:[-./]\d{1,2}){0,2}\b", " ", s)           # 연도 · 날짜
-    s = re.sub(r"(?m)^\s*\d+[.)]\s", " ", s)                          # 목록 번호
+    s = re.sub(r"(?<![\d,.])20\d\d(?:[-./]\d{1,2}){0,2}(?!\d)", " ", s)   # 연도 · 날짜
     return [norm(m) for m in NUM.findall(s)]
 
 
