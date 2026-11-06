@@ -23,8 +23,9 @@ aside{width:340px;background:var(--bg);border-left:1px solid var(--line);overflo
 <h3>판정 에이전트의 의견 <span id="sn"></span></h3>
 <div id="gate"><div class="hint">먼저 직접 읽고 지적을 남겨 보세요. 그다음 AI 의견과 비교합니다.</div><div class="bar" style="margin-top:6px"><button class="pri" id="reveal">내 지적을 끝냈어요 — 의견 보기</button><button id="revealNow">어디부터 볼지 모르겠어요</button></div></div>
 <div id="sugg"></div>
-<div class="bar" style="margin-top:8px"><button class="pri" id="apply" disabled>반영하고 다시 돌리기</button></div><div class="hint" id="jobmsg">동의한 의견과 내 지적을 스킬에 반영해 새 판을 만듭니다(약 3~4분).</div>
-<details id="chg" style="display:none;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:8px"><summary><b>이번 판에서 스킬이 바뀐 곳</b></summary><pre id="chgb" style="white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto"></pre></details>
+<div class="bar" style="margin-top:8px"><button class="pri" id="propose" disabled>스킬 수정안 만들기</button></div><div class="hint" id="jobmsg">동의한 의견과 내 지적으로 수정안을 만듭니다. 승인하기 전에는 스킬이 바뀌지 않습니다.</div>
+<div id="prop"></div>
+<details id="chg" style="display:none;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:8px"><summary><b>이번 판에서 스킬이 바뀐 곳</b></summary><pre id="chgb" style="white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto"></pre><button id="revert">이 변경 되돌리기</button></details>
 <h3>피드백 <span id="n"></span></h3><div id="list"></div>
 <h3>이 시스템을 고객에게 납품해도 될까요?</h3><textarea id="reason" rows="2" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px" placeholder="이유 한 줄"></textarea>
 <div class="bar" style="margin-top:6px"><button id="no">아직 아님</button><button class="ok" id="yes">납품해도 됨</button></div>
@@ -43,7 +44,7 @@ async function loadRuns(pick){const {runs}=await j('/api/runs');const s=$('#run'
 async function loadRun(){cur=await j('/api/run?run='+encodeURIComponent($('#run').value));
  $('#file').innerHTML=cur.files.map(f=>`<option>${f}</option>`).join('');
  $('#cmp').innerHTML='<option value="">이전 판과 비교 안 함</option>'+cur.lineage.slice(1).map(r=>`<option value="${r}">${r} 와 비교</option>`).join('');$('#cmp').parentNode.style.display=cur.lineage.length>1?'':'none';$('#yes').style.outline=cur.verdict?.ok?'3px solid #1f7a3f':'';$('#no').style.outline=cur.verdict&&!cur.verdict.ok?'3px solid #b00020':'';$('#evbox').style.display='none';
- $('#reason').value=cur.verdict?.reason||'';$('#gold').disabled=!cur.verdict?.ok;$('#cmd').style.display='none';$('#state').textContent=cur.verdict?(cur.verdict.ok?'판정: 납품해도 됨':'판정: 아직 아님'):'판정 전';$('#chg').style.display=cur.changes?'':'none';$('#chgb').textContent=cur.changes||'';if(cur.job&&cur.job.state==='running')watch(cur.run);show();renderList();renderSugg()}
+ $('#reason').value=cur.verdict?.reason||'';$('#gold').disabled=!cur.verdict?.ok;$('#cmd').style.display='none';$('#state').textContent=cur.verdict?(cur.verdict.ok?'판정: 납품해도 됨':'판정: 아직 아님'):'판정 전';$('#chg').style.display=cur.changes?'':'none';$('#chgb').textContent=cur.changes||'';$('#revert').disabled=!!cur.applied?.reverted;if(cur.job&&cur.job.state==='running')watch(cur.run);show();renderList();renderSugg()}
 function show(){const f=$('#file').value,c=$('#cmp').value;if(!f)return;
  if(c){frame.src=`/diff?a=${encodeURIComponent(c)}&b=${encodeURIComponent(cur.run)}&file=${encodeURIComponent(f)}`;return}
  frame.src=`/doc?run=${encodeURIComponent(cur.run)}&file=${encodeURIComponent(f)}`}
@@ -52,7 +53,7 @@ function renderList(){const f=$('#file').value;$('#n').textContent='('+cur.feedb
  $('#list').innerHTML=cur.feedback.map(x=>`<div class="fb ${x.kind==='good'?'good':''}" data-id="${x.id}"><button class="x" title="지우기" data-del="${x.id}">×</button><b>${KIND[x.kind]||x.kind}</b> ${x.file===f?'':'<span class=hint>'+esc(x.file)+'</span>'}<q>${esc(x.quote||'')}</q>${esc(x.comment||'')}</div>`).join('')||'<div class=hint>아직 없습니다.</div>';paint()}
 const KINDNAME={fix:'고쳐야 함',remove:'빼야 함',missing:'더 있어야 함'};
 function renderSugg(){const all=cur.suggestions||[];const s=all.filter(x=>!x.state);const shown=!!cur.ui?.revealed;$('#gate').style.display=shown||!all.length?'none':'';$('#sugg').style.display=shown||!all.length?'':'none';$('#sn').textContent=shown?'('+s.length+' 남음)':'';
- $('#apply').disabled=!cur.feedback.length||!!(cur.job&&cur.job.state==='running');
+ $('#propose').disabled=!cur.feedback.length||!!(cur.job&&cur.job.state==='running');renderProp();
  $('#sugg').innerHTML=s.map(x=>`<div class="fb" style="border-left-color:#3b6fe0" data-sid="${x.id}"><q>${esc(x.quote||'')}</q>${esc(x.comment||'')}<div class="hint">${esc(x.who||'')} · 동의하면 «${KINDNAME[x.kind]||x.kind}»로 반영</div><div class="bar" style="margin-top:6px"><button data-acc="${x.id}">동의</button><button data-rej="${x.id}">반대</button></div><div data-rb="${x.id}" style="display:none;margin-top:6px"><input data-rn="${x.id}" placeholder="왜 틀렸나요? 한 줄" style="width:100%"><button data-rs="${x.id}" style="margin-top:4px">반대 저장</button></div></div>`).join('')||'<div class=hint>'+(all.length?'모든 의견에 답했습니다.':'아직 판정 의견이 없습니다.')+'</div>'}
 $('#sugg').addEventListener('click',async e=>{const rj=e.target.dataset.rej;if(rj){$(`[data-rb="${rj}"]`).style.display='block';$(`[data-rn="${rj}"]`).focus();return}
  if(e.target.dataset.rn)return;const id=e.target.dataset.acc||e.target.dataset.rs;if(!id){const c=e.target.closest('.fb');if(c){const x=cur.suggestions.find(i=>i.id===c.dataset.sid);if(x)locate(x)}return}
@@ -68,9 +69,25 @@ function paint(){const doc=frame.contentDocument;if(!doc||!doc.body||$('#cmp').v
   const end=i+x.quote.length;for(const [n,o] of m){const a=Math.max(i,o),b=Math.min(end,o+n.nodeValue.length);if(a<b&&n.parentNode){const r=doc.createRange();r.setStart(n,a-o);r.setEnd(n,b-o);const mk=doc.createElement('mark');mk.className='fb'+(x.kind==='good'?' good':'');mk.dataset.id=x.id;try{r.surroundContents(mk)}catch(e){}}}}}
 async function reveal(){cur.ui=await j('/api/reveal',{run:cur.run});renderSugg()}
 $('#reveal').onclick=()=>reveal().catch(e=>say(e.message));$('#revealNow').onclick=()=>reveal().catch(e=>say(e.message));
-let poll=null;function watch(run){clearInterval(poll);poll=setInterval(async()=>{const r=await j('/api/run?run='+encodeURIComponent(run));const J=r.job;if(!J)return;if(J.state==='running'){$('#jobmsg').textContent=J.step+' …';return}clearInterval(poll);$('#apply').disabled=false;
- if(J.state==='failed'){$('#jobmsg').textContent='반영 실패: '+J.error;return}await loadRuns(J.new_run);$('#cmp').value=run;show();$('#chg').open=true;$('#jobmsg').textContent='새 판 '+J.new_run+' 이 나왔습니다. 빨강은 지운 곳, 초록은 새로 쓴 곳입니다.'},3000)}
-$('#apply').onclick=async()=>{try{await j('/api/apply',{run:cur.run});$('#apply').disabled=true;$('#jobmsg').textContent='시작했습니다 …';watch(cur.run);say('')}catch(e){say(e.message)}};
+function renderProp(){const P=cur.proposal,b=$('#prop');if(!P){b.innerHTML='';return}const NAME={add:'추가',modify:'변경',delete:'삭제'};const cs=P.changes||[];
+ let h='<h3>스킬 수정안 — 승인한 것만 바뀝니다</h3>';
+ for(const w of P.warnings||[])h+=`<div class="fb" style="border-left-color:#d9822b"><b>확인 필요</b> ${esc(w.message)}</div>`;
+ for(const n of P.needs_data||[])h+=`<div class="fb" style="border-left-color:#777"><b>자료 부족</b> ${esc(n.what)}<div class="hint">${esc(n.why||'')} · 규칙으로 해결할 수 없어 수정안에서 뺐습니다</div></div>`;
+ for(const c of cs){const rm=c.removes;h+=`<div class="fb" style="cursor:default;border-left-color:${rm?'#b00020':'#3b6fe0'}"><b style="color:${rm?'#b00020':'inherit'}">${rm?'⚠ 내용이 삭제됩니다':esc(NAME[c.kind]||c.kind)}</b> <span class="hint">${esc(c.file)}</span><div style="margin:4px 0">${esc(c.reason||'')}</div>`+
+  `<details${rm?' open':''}><summary class="hint">바뀌는 문구 보기</summary><div style="background:#fde7e7;padding:4px;font-size:12px;white-space:pre-wrap">− ${esc(c.before||'')}</div><div style="background:#e2f6e7;padding:4px;font-size:12px;white-space:pre-wrap">+ ${esc(c.after||'(삭제)')}</div></details>`+
+  (c.problem?`<div style="color:#b00020;font-size:12px">적용할 수 없음: ${esc(c.problem)}</div>`:'')+
+  `<div class="bar" style="margin-top:6px"><button data-ok="${c.id}" ${c.problem?'disabled':''} style="${c.decision==='approved'?'outline:3px solid #1f7a3f':''}">승인</button><button data-no="${c.id}" style="${c.decision==='rejected'?'outline:3px solid #b00020':''}">거절</button></div></div>`}
+ const done=cs.length&&cs.every(c=>c.decision),any=cs.some(c=>c.decision==='approved');
+ if(cs.length)h+=`<button class="pri" id="apply" ${done&&any?'':'disabled'}>승인한 것만 반영하고 다시 돌리기</button><div class="hint">${done?(any?'':'승인한 수정안이 없습니다.'):'모든 수정안을 승인하거나 거절해 주세요.'}</div>`;
+ else h+='<div class="hint">스킬을 바꿀 수정안이 없습니다.</div>';
+ b.innerHTML=h;const A=$('#apply');if(A)A.onclick=async()=>{try{await j('/api/apply',{run:cur.run});A.disabled=true;watch(cur.run);say('')}catch(e){say(e.message)}}}
+$('#prop').addEventListener('click',async e=>{const id=e.target.dataset.ok||e.target.dataset.no;if(!id)return;try{await j('/api/decide',{run:cur.run,id,approve:!!e.target.dataset.ok,reviewer:$('#who').value});cur=await j('/api/run?run='+encodeURIComponent(cur.run));renderProp();say('')}catch(err){say(err.message)}});
+let poll=null;function watch(run){clearInterval(poll);const tick=async()=>{const r=await j('/api/run?run='+encodeURIComponent(run));const J=r.job;if(!J)return;if(J.state==='running'){const sec=Math.round(Date.now()/1000-J.started);const m=Math.floor(sec/60),s=sec%60;$('#jobmsg').textContent=`${J.no}/${J.of}단계 · ${J.step} — ${m?m+'분 ':''}${s}초 지남 (이 단계는 보통 ${Math.round(J.eta/60*10)/10}분). 멈춘 것이 아닙니다.`;$('#propose').disabled=true;return}clearInterval(poll);
+ if(J.state==='failed'){$('#jobmsg').textContent='실패: '+J.error;$('#propose').disabled=false;return}
+ if(J.kind==='propose'){cur=r;$('#jobmsg').textContent='수정안이 나왔습니다. 아래에서 하나씩 승인하거나 거절해 주세요.';renderSugg();return}
+ await loadRuns(J.new_run);$('#cmp').value=run;show();$('#chg').open=true;$('#jobmsg').textContent='새 판 '+J.new_run+' 이 나왔습니다. 빨강은 지운 곳, 초록은 새로 쓴 곳입니다.'};tick();poll=setInterval(tick,3000)}
+$('#propose').onclick=async()=>{try{await j('/api/propose',{run:cur.run});$('#propose').disabled=true;watch(cur.run);say('')}catch(e){say(e.message)}};
+$('#revert').onclick=async()=>{try{await j('/api/revert',{run:cur.run});$('#jobmsg').textContent='스킬을 이 변경 전으로 되돌렸습니다. 결과물은 기록으로 남습니다.';$('#revert').disabled=true;say('')}catch(e){say(e.message)}};
 frame.addEventListener('load',()=>{const doc=frame.contentDocument;if(!doc||!doc.body)return;paint();
  doc.addEventListener('click',async ev=>{const a=ev.target.closest&&ev.target.closest('a.ev');if(!a)return;ev.preventDefault();const d=await j('/api/evidence?id='+encodeURIComponent(a.textContent.trim()));const b=$('#evbox');b.style.display='block';b.innerHTML=d.error?`<b>${esc(a.textContent)}</b><p>${esc(d.error)}</p><button onclick="this.parentNode.style.display='none'">닫기</button>`:`<b>${esc(d.evidence_id)}</b> · ${esc(d.status)} · 신뢰 ${esc(d.confidence||'')}<p>${esc(d.claim)}</p><blockquote style="margin:0;padding-left:10px;border-left:3px solid #bbb;color:#555">${esc(d.quote)}</blockquote><p class="hint">${esc(d.publisher)} · ${esc(d.source_title||'')} · 시점 ${esc(d.data_period||d.published_at||'')}<br>한계: ${esc(d.limitations||'없음')}</p><a href="${esc(d.source_url)}" target="_blank" rel="noopener">원문 열기 ↗</a> <button onclick="this.parentNode.style.display='none'">닫기</button>`});
  doc.addEventListener('mouseup',ev=>{if($('#cmp').value)return;const s=doc.getSelection();const q=s?s.toString().trim():'';if(q.length<2)return;

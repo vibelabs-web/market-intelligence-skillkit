@@ -129,7 +129,7 @@ def run_dir(run: str) -> Path:
 
 
 def doc_files(d: Path) -> list[str]:
-    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl", "ui.json", "changes.diff"}
+    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl", "ui.json", "changes.diff", "proposal.json", "applied.json", "review.md"}
     fs = [p.name for p in sorted(d.iterdir()) if p.is_file() and p.name not in hide and not p.name.startswith(".")]
     return sorted(fs, key=lambda n: (not n.startswith("brief"), n))
 
@@ -181,22 +181,112 @@ def claude_run(prompt: str) -> str:
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600).stdout
 
 
+EDITABLE = ("playbook/", "project/people/", "project/rubric.md", "my/")
+
+
+def check_change(root: Path, c: dict) -> str:
+    """수정안을 그대로 적용할 수 있으면 빈 문자열, 아니면 이유"""
+    rel = str(c.get("file") or "")
+    if ".." in rel or rel.startswith("/") or not (rel.startswith(EDITABLE)):
+        return f"고칠 수 없는 파일입니다: {rel}"
+    p = root / rel
+    if not p.is_file():
+        return f"없는 파일입니다: {rel}"
+    before = c.get("before") or ""
+    n = p.read_text(encoding="utf-8").count(before) if before else 0
+    if n != 1:
+        return f"바꿀 문구가 파일에 {n}번 있습니다(한 번이어야 합니다)"
+    return ""
+
+
+def apply_changes(root: Path, changes: list[dict]) -> list[str]:
+    """승인된 수정안을 글자 그대로 적용한다. 하나라도 안 되면 아무것도 바꾸지 않는다"""
+    for c in changes:
+        err = check_change(root, c)
+        if err:
+            raise ValueError(f"{c.get('id')}: {err}")
+    texts: dict[str, str] = {}
+    for c in changes:
+        rel = c["file"]
+        cur = texts.get(rel, (root / rel).read_text(encoding="utf-8"))
+        if cur.count(c["before"]) != 1:
+            raise ValueError(f"{c.get('id')}: 다른 수정안과 겹칩니다")
+        texts[rel] = cur.replace(c["before"], c.get("after") or "")
+    for rel, text in texts.items():
+        (root / rel).write_text(text, encoding="utf-8")
+    return sorted(texts)
+
+
+def git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-c", "user.name=mi-skillkit", "-c", "user.email=mi@local", *args], cwd=ROOT, capture_output=True, text=True)
+
+
+def next_run(run: str) -> str:
+    m = re.fullmatch(r"(.*?)-?(\d+)?", run)
+    base, n = (m.group(1) or run), int(m.group(2) or 1)
+    while True:
+        n += 1
+        name = f"{base}-{n:02d}"
+        if not (RUNS / name).exists():
+            return name
+
+
+def load_proposal(d: Path) -> dict | None:
+    p = read_json(d / "proposal.json", None)
+    if p is None:
+        return None
+    for i, c in enumerate(p.get("changes", [])):
+        c["id"] = str(c.get("id", f"c{i + 1}"))
+        c["problem"] = check_change(ROOT, c)
+        after, before = c.get("after") or "", c.get("before") or ""
+        if not after.strip() or c.get("kind") == "delete" or len(after) < len(before) * 0.6:
+            c["removes"] = True                      # 줄어드는 수정은 삭제로 표시한다 — 모델이 add 라고 적어도
+    return p
+
+
+def propose_job(run: str) -> None:
+    job = JOBS[run]
+    try:
+        job.update(step="피드백을 자료와 대조해 수정안을 만드는 중", no=1, of=1, eta=60)
+        (RUNS / run / "proposal.json").unlink(missing_ok=True)
+        out = claude_run(f"/mi-feedback {run}")
+        if load_proposal(RUNS / run) is None:
+            job.update(state="failed", error="수정안을 만들지 못했습니다. " + out[-300:])
+            return
+        job.update(state="done", kind="propose")
+    except Exception as e:                           # 어떤 실패든 화면에 알린다
+        job.update(state="failed", error=str(e)[:300])
+
+
 def apply_job(run: str) -> None:
     job = JOBS[run]
     try:
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        d = RUNS / run
+        prop = load_proposal(d) or {}
+        ok = [c for c in prop.get("changes", []) if c.get("decision") == "approved"]
+        head = git("rev-parse", "HEAD").stdout.strip()
+        files = apply_changes(ROOT, ok)
+        git("add", "--", *files)
+        git("commit", "-qm", f"{run} 피드백 승인 반영: " + " · ".join(c["id"] for c in ok))
+        commit = git("rev-parse", "--short", "HEAD").stdout.strip()
+        with open(ROOT / "shave-log.md", "a", encoding="utf-8") as f:
+            for c in ok:
+                f.write(f"| {run} | {c['file']} | {str(c.get('reason', '')).replace('|', '/')} | {','.join(map(str, c.get('from_feedback', [])))} | 승인 ({c.get('decided_by', '')}) |\n")
+        person = read_json(d / "run.json", {}).get("person")
+        new = next_run(run)
         before = {p.name for p in RUNS.iterdir() if p.is_dir()}
-        job["step"] = "피드백을 스킬에 반영하고 새 판을 만드는 중"
-        out = claude_run(f"/mi-feedback {run} 바로")
-        new = sorted(p.name for p in RUNS.iterdir() if p.is_dir() and p.name not in before and (p / "brief.md").exists())
-        if not new:
-            job.update(state="failed", error="새 판을 만들지 못했습니다. " + out[-300:])
+        job.update(step="승인한 규칙으로 새 판을 만드는 중", no=1, of=2, eta=120)
+        out = claude_run(f"/mi-brief {person} {new} {run}")
+        made = sorted(p.name for p in RUNS.iterdir() if p.is_dir() and p.name not in before and (p / "brief.md").exists())
+        if not made:
+            job.update(state="failed", error="새 판을 만들지 못했습니다. 승인한 수정은 반영되어 있습니다. " + out[-300:])
             return
-        job["step"] = "판정 에이전트가 새 판을 읽는 중"
-        claude_run(f"/mi-review {new[-1]}")
-        diff = subprocess.run(["git", "diff", head, "--", "playbook", "project/people", "project/rubric.md", "my"], cwd=ROOT, capture_output=True, text=True).stdout
-        (RUNS / new[-1] / "changes.diff").write_text(diff, encoding="utf-8")
-        job.update(state="done", new_run=new[-1], summary=out[-1800:])
+        job.update(step="판정 에이전트가 새 판을 읽는 중", no=2, of=2, eta=70)
+        claude_run(f"/mi-review {made[-1]}")
+        diff = git("diff", head, commit, "--", *files).stdout
+        (RUNS / made[-1] / "changes.diff").write_text(diff, encoding="utf-8")
+        (RUNS / made[-1] / "applied.json").write_text(json.dumps({"from_run": run, "head_before": head, "commit": commit, "files": files}, ensure_ascii=False), encoding="utf-8")
+        job.update(state="done", kind="apply", new_run=made[-1])
     except Exception as e:                           # 어떤 실패든 화면에 알린다
         job.update(state="failed", error=str(e)[:300])
 
@@ -293,7 +383,7 @@ class H(BaseHTTPRequestHandler):
                 d = run_dir(q["run"])
                 ch = d / "changes.diff"
                 self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d), "suggestions": read_suggestions(d),
-                         "ui": read_json(d / "ui.json", {}), "changes": ch.read_text(encoding="utf-8") if ch.exists() else "", "job": JOBS.get(q["run"]),
+                         "ui": read_json(d / "ui.json", {}), "proposal": load_proposal(d), "applied": read_json(d / "applied.json", None), "changes": ch.read_text(encoding="utf-8") if ch.exists() else "", "job": JOBS.get(q["run"]),
                          "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"])})
             elif u.path == "/api/evidence":
                 self.js(load_register().get(q["id"]) or {"error": "근거 묶음에 없는 번호입니다"})
@@ -347,17 +437,55 @@ class H(BaseHTTPRequestHandler):
                 ui = {"revealed": True, "own_feedback": len(read_feedback(d)), "at": dt.datetime.now().isoformat(timespec="seconds")}
                 (d / "ui.json").write_text(json.dumps(ui, ensure_ascii=False), encoding="utf-8")
                 self.js(ui)
-            elif self.path == "/api/apply":
+            elif self.path in ("/api/propose", "/api/apply"):
                 run = safe(data["run"])
                 d = run_dir(run)
-                if not read_feedback(d):
-                    raise ValueError("반영할 피드백이 없습니다. 지적을 남기거나 의견에 동의해 주세요")
+                if self.path == "/api/propose":
+                    if not read_feedback(d):
+                        raise ValueError("반영할 피드백이 없습니다. 지적을 남기거나 의견에 동의해 주세요")
+                    target = propose_job
+                else:
+                    prop = load_proposal(d) or {}
+                    cs = prop.get("changes", [])
+                    if any(not c.get("decision") for c in cs):
+                        raise ValueError("모든 수정안을 승인하거나 거절해 주세요")
+                    if not any(c.get("decision") == "approved" for c in cs):
+                        raise ValueError("승인한 수정안이 없습니다")
+                    bad = [c["id"] for c in cs if c.get("decision") == "approved" and c.get("problem")]
+                    if bad:
+                        raise ValueError("적용할 수 없는 수정안을 승인했습니다: " + ",".join(bad))
+                    target = apply_job
                 with JOB_LOCK:
                     if any(j["state"] == "running" for j in JOBS.values()):
-                        raise ValueError("다른 반영이 진행 중입니다")
-                    JOBS[run] = {"state": "running", "step": "시작", "at": dt.datetime.now().isoformat(timespec="seconds")}
-                threading.Thread(target=apply_job, args=(run,), daemon=True).start()
+                        raise ValueError("다른 작업이 진행 중입니다")
+                    JOBS[run] = {"state": "running", "step": "시작", "no": 1, "of": 1, "eta": 60, "started": dt.datetime.now().timestamp()}
+                threading.Thread(target=target, args=(run,), daemon=True).start()
                 self.js(JOBS[run])
+            elif self.path == "/api/decide":
+                d = run_dir(data["run"])
+                prop = read_json(d / "proposal.json", None)
+                if not prop:
+                    raise ValueError("수정안이 없습니다")
+                c = next((x for i, x in enumerate(prop.get("changes", [])) if str(x.get("id", f"c{i + 1}")) == str(data["id"])), None)
+                if c is None:
+                    raise ValueError("없는 수정안입니다")
+                c.update(decision="approved" if data.get("approve") else "rejected", decided_by=data.get("reviewer", ""), note=data.get("note", ""))
+                (d / "proposal.json").write_text(json.dumps(prop, ensure_ascii=False, indent=1), encoding="utf-8")
+                self.js(c)
+            elif self.path == "/api/revert":
+                d = run_dir(data["run"])
+                a = read_json(d / "applied.json", None)
+                if not a:
+                    raise ValueError("되돌릴 변경이 없습니다")
+                if a.get("reverted"):
+                    raise ValueError("이미 되돌렸습니다")
+                if git("checkout", a["head_before"], "--", *a["files"]).returncode != 0:
+                    raise ValueError("되돌리지 못했습니다")
+                git("add", "--", *a["files"])
+                git("commit", "-qm", f"{data['run']} 의 스킬 변경 되돌리기")
+                a["reverted"] = True
+                (d / "applied.json").write_text(json.dumps(a, ensure_ascii=False), encoding="utf-8")
+                self.js(a)
             elif self.path == "/api/verdict":
                 d = run_dir(data["run"])
                 v = {"ok": bool(data.get("ok")), "reason": data.get("reason", ""), "reviewer": data.get("reviewer", ""), "at": dt.datetime.now().isoformat(timespec="seconds")}

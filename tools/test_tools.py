@@ -84,5 +84,36 @@ class Golden(unittest.TestCase):
         ok,_=score_assertions(A,"확정된 구리",{"c":"PASS"}); self.assertFalse(ok)
 
 
+class Approval(unittest.TestCase):
+    def setUp(self):
+        import tempfile, review_server as rs
+        self.rs = rs; self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
+        (self.root / "playbook").mkdir(); (self.root / "tools").mkdir(); (self.root / "secret.txt").write_text("x", encoding="utf-8")
+        self.f = self.root / "playbook/a.md"; self.f.write_text("규칙 하나.\n규칙 둘.\n규칙 둘.\n", encoding="utf-8")
+    def tearDown(self):
+        self.tmp.cleanup()
+    def c(self, **k):
+        return dict({"id": "c1", "file": "playbook/a.md", "before": "규칙 하나.", "after": "새 규칙."}, **k)
+    def test_only_approved_text_changes(self):
+        self.rs.apply_changes(self.root, [self.c()])
+        self.assertEqual(self.f.read_text(encoding="utf-8"), "새 규칙.\n규칙 둘.\n규칙 둘.\n")
+    def test_ambiguous_rejected(self):
+        self.assertIn("2번", self.rs.check_change(self.root, self.c(before="규칙 둘.")))
+    def test_missing_text_rejected(self):
+        self.assertIn("0번", self.rs.check_change(self.root, self.c(before="없는 문구")))
+    def test_outside_files_rejected(self):
+        for f in ("secret.txt", "../x.md", "/etc/passwd", "tools/a.py", "playbook/../secret.txt"):
+            self.assertTrue(self.rs.check_change(self.root, self.c(file=f)), f)
+    def test_all_or_nothing(self):
+        with self.assertRaises(ValueError):
+            self.rs.apply_changes(self.root, [self.c(), self.c(id="c2", before="없는 문구")])
+        self.assertIn("규칙 하나.", self.f.read_text(encoding="utf-8"))
+    def test_overlap_rejected(self):
+        with self.assertRaises(ValueError):
+            self.rs.apply_changes(self.root, [self.c(), self.c(id="c2")])
+    def test_next_run(self):
+        self.assertTrue(self.rs.next_run("zz-test-01").endswith("-02"))
+
+
 if __name__ == "__main__":
     unittest.main()
