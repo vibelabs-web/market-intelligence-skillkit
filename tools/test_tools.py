@@ -111,6 +111,9 @@ class Approval(unittest.TestCase):
     def test_overlap_rejected(self):
         with self.assertRaises(ValueError):
             self.rs.apply_changes(self.root, [self.c(), self.c(id="c2")])
+    def test_removed_sentence_detected(self):
+        self.assertEqual(self.rs.removed_sentences("규칙 하나. 규칙 둘.", "규칙 하나. 규칙 셋."), ["규칙 둘."])
+        self.assertEqual(self.rs.removed_sentences("규칙 하나.", "규칙 하나. 규칙 셋."), [])
     def test_next_run(self):
         self.assertTrue(self.rs.next_run("zz-test-01").endswith("-02"))
 

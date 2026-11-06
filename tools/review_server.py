@@ -231,6 +231,12 @@ def next_run(run: str) -> str:
             return name
 
 
+def removed_sentences(before: str, after: str) -> list[str]:
+    """before 의 문장 중 after 에 그대로 남지 않은 것"""
+    parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", before) if s.strip()]
+    return [s for s in parts if s not in after]
+
+
 def load_proposal(d: Path) -> dict | None:
     p = read_json(d / "proposal.json", None)
     if p is None:
@@ -239,8 +245,10 @@ def load_proposal(d: Path) -> dict | None:
         c["id"] = str(c.get("id", f"c{i + 1}"))
         c["problem"] = check_change(ROOT, c)
         after, before = c.get("after") or "", c.get("before") or ""
-        if not after.strip() or c.get("kind") == "delete" or len(after) < len(before) * 0.6:
-            c["removes"] = True                      # 줄어드는 수정은 삭제로 표시한다 — 모델이 add 라고 적어도
+        lost = removed_sentences(before, after)
+        if lost:
+            c["removes"] = True                      # 기존 문장이 사라지면 표시한다 — 모델이 add 라고 적어도
+            c["removed"] = lost
     return p
 
 
@@ -276,12 +284,16 @@ def apply_job(run: str) -> None:
         new = next_run(run)
         before = {p.name for p in RUNS.iterdir() if p.is_dir()}
         job.update(step="승인한 규칙으로 새 판을 만드는 중", no=1, of=2, eta=120)
-        out = claude_run(f"/mi-brief {person} {new} {run}")
+        job["started"] = dt.datetime.now().timestamp()
+        out = claude_run(f"/mi-brief {person} {new}")     # 이전 판의 피드백을 읽지 못하게 부모를 넘기지 않는다 — 승인한 규칙만 반영되게
         made = sorted(p.name for p in RUNS.iterdir() if p.is_dir() and p.name not in before and (p / "brief.md").exists())
         if not made:
             job.update(state="failed", error="새 판을 만들지 못했습니다. 승인한 수정은 반영되어 있습니다. " + out[-300:])
             return
-        job.update(step="판정 에이전트가 새 판을 읽는 중", no=2, of=2, eta=70)
+        meta = read_json(RUNS / made[-1] / "run.json", {})
+        meta.update(person=person, parent=run, skill_commit=commit)
+        (RUNS / made[-1] / "run.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        job.update(step="판정 에이전트가 새 판을 읽는 중", no=2, of=2, eta=70, started=dt.datetime.now().timestamp())
         claude_run(f"/mi-review {made[-1]}")
         diff = git("diff", head, commit, "--", *files).stdout
         (RUNS / made[-1] / "changes.diff").write_text(diff, encoding="utf-8")
