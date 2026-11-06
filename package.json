@@ -1,0 +1,39 @@
+{
+  "name": "mi-workbench",
+  "private": true,
+  "version": "4.0.0",
+  "type": "module",
+  "description": "Market Intelligence 워크벤치 — 리서치 우선 · 지식 DB · 판단 기준을 다듬는 작업실",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "start": "npm run build && tsx server/src/index.ts",
+    "test": "vitest run --root server",
+    "typecheck": "tsc -p server && tsc -p web"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.3.0",
+    "fastify": "^5.12.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "concurrently": "^10.0.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}

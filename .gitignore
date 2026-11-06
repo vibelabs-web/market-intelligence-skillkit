@@ -7,3 +7,6 @@ cases/
 project/case.json
 _instructor/
 golden/
+node_modules/
+data/
+web/dist/
