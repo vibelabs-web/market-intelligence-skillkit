@@ -155,7 +155,7 @@ def main() -> int:
         paths = [Path(c) for c in a.results]
         if len({p.resolve() for p in paths}) != len(paths):
             raise OSError("같은 폴더를 여러 번 넣었습니다")
-        rows = load_rows(str(ROOT / "project/fact-pack/evidence-register.csv"))
+        rows = load_rows(str(g / "fact-pack/evidence-register.csv" if (g / "fact-pack/evidence-register.csv").exists() else ROOT / "project/fact-pack/evidence-register.csv"))
         grades = json.loads((g / "grades.json").read_text(encoding="utf-8"))
         person = json.loads((g / "golden.json").read_text(encoding="utf-8")).get("person") if (g / "golden.json").exists() else None
         prof = g / "profile.md" if (g / "profile.md").exists() else ROOT / f"project/people/{person}.md"

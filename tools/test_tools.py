@@ -309,6 +309,12 @@ class Approval(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.rs.revert_commit(first, self.root)
         self.assertEqual(self.f.read_text(encoding="utf-8"), "B\n")
+    def test_guard_allows_named_area(self):
+        (self.root / "project").mkdir()
+        before = self.rs.snapshot(self.root, ("project",))
+        (self.root / "project/brief.md").write_text("새 사례", encoding="utf-8")
+        self.assertEqual(self.rs.restore_changes(self.root, before, ("project",)), [])
+        self.assertTrue((self.root / "project/brief.md").exists())
     def test_next_run(self):
         self.assertTrue(self.rs.next_run("zz-test-01").endswith("-02"))
 

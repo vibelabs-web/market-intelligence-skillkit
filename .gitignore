@@ -3,3 +3,5 @@ __pycache__/
 runs/*
 !runs/.gitkeep
 .claude/memory/
+cases/
+project/case.json

@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNS, GOLDEN = ROOT / "runs", ROOT / "golden"
 UI = Path(__file__).with_name("review_ui.html")
+HOME = Path(__file__).with_name("home_ui.html")
 TOKENS = """:root{--paper:oklch(96.5% .008 92);--paper-2:oklch(92.5% .012 88);--surface:oklch(99% .004 92);--ink:oklch(20% .012 60);--ink-2:oklch(30% .012 58);--muted:oklch(44% .014 60);--rule:oklch(78% .014 75);--rule-2:oklch(34% .012 60);
 --accent:oklch(44% .13 32);--accent-ink:oklch(97% .01 90);--focus:oklch(48% .17 32);--ok:oklch(40% .09 150);--ok-soft:oklch(92% .04 150);--bad-soft:oklch(92% .03 32);--mark:oklch(90% .09 90);--mark-ok:oklch(90% .06 150);--ai:oklch(42% .08 250);--warn:oklch(50% .11 70);
 --font:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}"""
@@ -192,14 +193,14 @@ DENY = "Edit(playbook/**),Write(playbook/**),Edit(project/**),Write(project/**),
 PROTECTED = ("playbook", "project", "my", "tools", ".claude/skills", ".claude/settings.json")   # .claude/memory 는 훅이 쓰는 곳이라 보지 않는다
 
 
-def snapshot(root: Path) -> dict[str, bytes]:
-    paths = [q for d in PROTECTED for q in ([root / d] if (root / d).is_file() else (root / d).rglob("*"))]
+def snapshot(root: Path, allow: tuple = ()) -> dict[str, bytes]:
+    paths = [q for d in PROTECTED if d not in allow for q in ([root / d] if (root / d).is_file() else (root / d).rglob("*"))]
     return {str(p.relative_to(root)): p.read_bytes() for p in paths if p.is_file() and "__pycache__" not in p.parts}
 
 
-def restore_changes(root: Path, before: dict[str, bytes]) -> list[str]:
+def restore_changes(root: Path, before: dict[str, bytes], allow: tuple = ()) -> list[str]:
     """AI 작업 중 바뀐 보호 파일을 되돌리고 그 목록을 준다. 스킬은 승인으로만 바뀐다"""
-    after = snapshot(root)
+    after = snapshot(root, allow)
     changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
     for k in changed:
         if k in before:
@@ -210,14 +211,152 @@ def restore_changes(root: Path, before: dict[str, bytes]) -> list[str]:
     return changed
 
 
-def claude_run(prompt: str, tools: str = RUN_TOOLS) -> str:
-    cmd = ["claude", "-p", prompt, "--model", os.environ.get("MI_MODEL", "claude-sonnet-5-5"), "--allowedTools", tools, "--disallowedTools", DENY, "--output-format", "text"]
-    before = snapshot(ROOT)
-    out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600).stdout
-    changed = restore_changes(ROOT, before)
+def claude_run(prompt: str, tools: str = RUN_TOOLS, allow: tuple = (), timeout: int = 900) -> str:
+    deny = ",".join(x for x in DENY.split(",") if not any(f"({a}/" in x for a in allow))
+    cmd = ["claude", "-p", prompt, "--model", os.environ.get("MI_MODEL", "claude-sonnet-5-5"), "--allowedTools", tools, "--disallowedTools", deny, "--output-format", "text"]
+    before = snapshot(ROOT, allow)
+    out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout).stdout
+    changed = restore_changes(ROOT, before, allow)
     if changed:
         raise RuntimeError("AI 작업이 승인 없이 파일을 고치려 해 되돌렸습니다: " + ", ".join(changed))
     return out
+
+
+CASES = ROOT / "cases"
+DEFAULT_CASE = {"id": "hanbit", "title": "한빛모션 · 베트남과 태국 중 어디로"}
+TOPIC_TOOLS = "Read,Write(project/**),Edit(project/**),WebSearch,WebFetch,Bash(python3 *),Bash(mkdir*)"
+
+
+def active_case() -> dict:
+    return read_json(ROOT / "project/case.json", None) or dict(DEFAULT_CASE)
+
+
+def save_active() -> None:
+    """지금 사례(project/)를 cases/<id>/ 에 보관한다"""
+    c = active_case()
+    dst = CASES / safe(c["id"])
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(ROOT / "project", dst, ignore=shutil.ignore_patterns("_*"))
+    (dst / "case.json").write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+
+
+def load_case(cid: str) -> None:
+    src = CASES / safe(cid)
+    if not (src / "brief.md").exists():
+        raise ValueError("없는 프로젝트입니다")
+    shutil.rmtree(ROOT / "project")
+    shutil.copytree(src, ROOT / "project")
+
+
+def list_cases() -> list[dict]:
+    act = active_case()
+    out = {act["id"]: dict(act, active=True)}
+    if CASES.is_dir():
+        for d in sorted(CASES.iterdir()):
+            c = read_json(d / "case.json", None)
+            if c and c["id"] not in out:
+                out[c["id"]] = dict(c, active=False)
+    return sorted(out.values(), key=lambda c: (not c["active"], c.get("created", "")))
+
+
+def people() -> list[dict]:
+    out = []
+    for f in sorted((ROOT / "project/people").glob("*.md")):
+        t = f.read_text(encoding="utf-8")
+        head = (t.splitlines() or [""])[0].lstrip("# ").strip()
+        out.append({"id": f.stem, "title": head, "text": t})
+    return out
+
+
+def case_view() -> dict:
+    b = ROOT / "project/brief.md"
+    text = b.read_text(encoding="utf-8") if b.exists() else ""
+    m = re.search(r"## 상황\s*\n(.+?)(?:\n## |\Z)", text, re.S)
+    rows = []
+    reg = ROOT / "project/fact-pack/evidence-register.csv"
+    if reg.exists():
+        with open(reg, encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f))
+    dom: dict[str, int] = {}
+    for r in rows:
+        dom[r.get("domain") or "기타"] = dom.get(r.get("domain") or "기타", 0) + 1
+    notes = ROOT / "project/fact-pack/notes.md"
+    return {"situation": (m.group(1).strip() if m else ""), "evidence": len(rows), "by_domain": dom,
+            "uncertain": sum(r.get("status") in ("proposed", "uncertain") for r in rows),
+            "notes": notes.read_text(encoding="utf-8") if notes.exists() else "", "people": people()}
+
+
+def case_runs(cid: str) -> list[dict]:
+    out = []
+    if RUNS.is_dir():
+        for d in sorted((x for x in RUNS.iterdir() if x.is_dir()), key=lambda x: x.stat().st_mtime, reverse=True):
+            m = read_json(d / "run.json", {})
+            if (m.get("case") or DEFAULT_CASE["id"]) == cid and (d / "brief.md").exists():
+                out.append({"run": d.name, "person": m.get("person"), "parent": m.get("parent"), "verdict": read_json(d / "verdict.json", None),
+                            "golden": (GOLDEN / d.name).exists(), "feedback": len(read_feedback(d))})
+    return out
+
+
+def new_run_name(person: str) -> str:
+    n = 1
+    while (RUNS / f"{person}-{n:02d}").exists():
+        n += 1
+    return f"{person}-{n:02d}"
+
+
+def topic_job(case: dict, ask: str) -> None:
+    job = JOBS["_home"]
+    before = active_case()
+    try:
+        job.update(step="지금 프로젝트를 보관하는 중", no=1, of=3, eta=5)
+        save_active()
+        rubric = (ROOT / "project/rubric.md").read_text(encoding="utf-8") if (ROOT / "project/rubric.md").exists() else ""
+        shutil.rmtree(ROOT / "project")
+        (ROOT / "project/people").mkdir(parents=True)
+        (ROOT / "project/fact-pack").mkdir()
+        if rubric:
+            (ROOT / "project/rubric.md").write_text(rubric, encoding="utf-8")
+        (ROOT / "project/case.json").write_text(json.dumps(case, ensure_ascii=False), encoding="utf-8")
+        job.update(step="공개 자료를 찾아 열어 보고 사례를 만드는 중", no=2, of=3, eta=1200, started=dt.datetime.now().timestamp())
+        out = claude_run(f"/mi-topic {ask} 바로\n\n(웹 화면에서 실행한다. 사용자에게 묻지 않는다. 이전 사례 보관과 git 은 프로그램이 이미 했으니 하지 않는다. project/ 는 비어 있다.)",
+                         TOPIC_TOOLS, allow=("project",), timeout=2400)
+        job.update(step="만든 사례를 점검하는 중", no=3, of=3, eta=5)
+        for d in (ROOT / "project").glob("_*"):
+            shutil.rmtree(d, ignore_errors=True)
+        reg = ROOT / "project/fact-pack/evidence-register.csv"
+        n = sum(1 for _ in csv.DictReader(open(reg, encoding="utf-8", newline=""))) if reg.exists() else 0
+        if not people() or n < 6 or not (ROOT / "project/brief.md").exists():
+            raise RuntimeError(f"사례를 다 만들지 못했습니다(근거 {n}건, 받는 사람 {len(people())}명). " + out[-300:])
+        save_active()
+        job.update(state="done", kind="topic")
+    except Exception as e:                           # 실패하면 이전 프로젝트로 돌아간다
+        try:
+            if (CASES / before["id"] / "brief.md").exists():
+                load_case(before["id"])
+        except Exception:
+            pass
+        job.update(state="failed", error=str(e)[:400])
+
+
+def brief_job(person: str) -> None:
+    job = JOBS["_home"]
+    try:
+        run = new_run_name(person)
+        job.update(step=f"{person} 의 브리핑을 쓰는 중 (판단표 → 브리핑 → 검사)", no=1, of=2, eta=300, run=run, started=dt.datetime.now().timestamp())
+        before = {p.name for p in RUNS.iterdir() if p.is_dir()}
+        out = claude_run(f"/mi-brief {person} {run}")
+        made = sorted(p.name for p in RUNS.iterdir() if p.is_dir() and p.name not in before and (p / "brief.md").exists())
+        if not made:
+            raise RuntimeError("브리핑을 만들지 못했습니다. " + out[-300:])
+        meta = read_json(RUNS / made[-1] / "run.json", {})
+        meta.update(person=person, case=active_case()["id"])
+        (RUNS / made[-1] / "run.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        job.update(step="판정 에이전트가 새 맥락에서 읽는 중", no=2, of=2, eta=100, started=dt.datetime.now().timestamp())
+        claude_run(f"/mi-review {made[-1]}")
+        job.update(state="done", kind="brief", new_run=made[-1])
+    except Exception as e:
+        job.update(state="failed", error=str(e)[:400])
 
 
 EDITABLE = ("playbook/", "project/people/", "project/rubric.md", "my/")
@@ -364,7 +503,7 @@ def apply_job(run: str) -> None:
             job.update(state="failed", error="새 판을 만들지 못했습니다. 승인한 수정은 반영되어 있습니다. " + out[-300:])
             return
         meta = read_json(RUNS / made[-1] / "run.json", {})
-        meta.update(person=person, parent=run, skill_commit=commit)
+        meta.update(person=person, parent=run, skill_commit=commit, case=read_json(d / "run.json", {}).get("case") or active_case()["id"])
         (RUNS / made[-1] / "run.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         job.update(step="판정 에이전트가 새 판을 읽는 중", no=2, of=2, eta=70, started=dt.datetime.now().timestamp())
         claude_run(f"/mi-review {made[-1]}")
@@ -424,6 +563,10 @@ def freeze_golden(run: str, name: str | None) -> dict:
     for f in doc_files(d):
         shutil.copy2(d / f, g / f)
     (g / "grades.json").write_text(json.dumps(grades, ensure_ascii=False, indent=1), encoding="utf-8")
+    shutil.copytree(ROOT / "project/fact-pack", g / "fact-pack")      # 다른 사례로 바뀌어도 이 골든의 근거로 채점한다
+    if person_file := (ROOT / f"project/people/{read_json(d / 'run.json', {}).get('person')}.md"):
+        if person_file.exists():
+            shutil.copy2(person_file, g / "profile.md")
     if (ROOT / "my/lens.md").exists():
         shutil.copy2(ROOT / "my/lens.md", g / "lens.md")      # 판단 기준 순서도 재현 대상이다
     history = []
@@ -443,7 +586,7 @@ def freeze_golden(run: str, name: str | None) -> dict:
     except OSError:
         commit = ""
     person = meta.get("person")
-    manifest = {"golden": g.name, "run": run, "lineage": lineage(run), "person": person, "verdict": v, "skill_commit": meta.get("skill_commit") or commit,
+    manifest = {"golden": g.name, "run": run, "case": active_case(), "lineage": lineage(run), "person": person, "verdict": v, "skill_commit": meta.get("skill_commit") or commit,
                 "at": dt.datetime.now().isoformat(timespec="seconds"),
                 "inputs": {"profile": f"project/people/{person}.md" if person else None, "profile_sha": sha(f"project/people/{person}.md") if person else None,
                            "evidence": "project/fact-pack/evidence-register.csv", "evidence_sha": sha("project/fact-pack/evidence-register.csv")}}
@@ -471,13 +614,21 @@ class H(BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
         try:
-            if u.path == "/":
+            if u.path == "/" and "run" not in q:
+                self.send(HOME.read_text(encoding="utf-8").replace("/*TOKENS*/", TOKENS))
+            elif u.path in ("/", "/review"):
                 self.send(UI.read_text(encoding="utf-8").replace("/*TOKENS*/", TOKENS))
+            elif u.path == "/api/home":
+                c = active_case()
+                self.js({"active": c, "cases": list_cases(), "case": case_view(), "runs": case_runs(c["id"]), "job": JOBS.get("_home")})
             elif u.path == "/api/runs":
                 out = []
                 if RUNS.is_dir():
+                    cid = active_case()["id"]
                     for d in sorted((x for x in RUNS.iterdir() if x.is_dir()), key=lambda x: x.stat().st_mtime, reverse=True):
                         m = read_json(d / "run.json", {})
+                        if (m.get("case") or DEFAULT_CASE["id"]) != cid:
+                            continue
                         fb = read_feedback(d)
                         out.append({"run": d.name, "person": m.get("person"), "parent": m.get("parent"), "files": doc_files(d), "feedback": len(fb),
                                     "verdict": read_json(d / "verdict.json", None), "golden": (GOLDEN / d.name).exists()})
@@ -602,6 +753,47 @@ class H(BaseHTTPRequestHandler):
                 v = {"ok": bool(data.get("ok")), "reason": data.get("reason", ""), "reviewer": data.get("reviewer", ""), "at": dt.datetime.now().isoformat(timespec="seconds")}
                 (d / "verdict.json").write_text(json.dumps(v, ensure_ascii=False, indent=1), encoding="utf-8")
                 self.js(v)
+            elif self.path in ("/api/case/new", "/api/brief"):
+                if self.path == "/api/case/new":
+                    topic = str(data.get("topic", "")).strip()
+                    if len(topic) < 4:
+                        raise ValueError("주제를 한 줄 적어 주세요")
+                    extra = [f"{k}: {str(data.get(f, '')).strip()}" for k, f in (("고객", "customer"), ("받는 사람", "people"), ("범위", "scope")) if str(data.get(f, "")).strip()]
+                    cid = "c" + dt.datetime.now().strftime("%m%d%H%M%S")
+                    case = {"id": cid, "title": topic[:60], "created": dt.datetime.now().isoformat(timespec="seconds")}
+                    target, args = topic_job, (case, topic + ("\n" + "\n".join(extra) if extra else ""))
+                else:
+                    person = safe(str(data.get("person", "")))
+                    if not (ROOT / f"project/people/{person}.md").exists():
+                        raise ValueError("없는 받는 사람입니다")
+                    target, args = brief_job, (person,)
+                with JOB_LOCK:
+                    if any(j["state"] == "running" for j in JOBS.values()):
+                        raise ValueError("다른 작업이 진행 중입니다")
+                    JOBS["_home"] = {"state": "running", "step": "시작", "no": 1, "of": 1, "eta": 60, "started": dt.datetime.now().timestamp(), "kind": "topic" if target is topic_job else "brief"}
+                threading.Thread(target=target, args=args, daemon=True).start()
+                self.js(JOBS["_home"])
+            elif self.path == "/api/case/activate":
+                with JOB_LOCK:
+                    if any(j["state"] == "running" for j in JOBS.values()):
+                        raise ValueError("작업이 끝난 뒤에 바꿀 수 있습니다")
+                    if data["id"] != active_case()["id"]:
+                        save_active()
+                        load_case(data["id"])
+                self.js(active_case())
+            elif self.path == "/api/person/save":
+                if any(j["state"] == "running" for j in JOBS.values()):
+                    raise ValueError("작업이 끝난 뒤에 저장할 수 있습니다")
+                pid = safe(str(data.get("id", "")))
+                f = ROOT / f"project/people/{pid}.md"
+                if not f.exists():
+                    raise ValueError("없는 받는 사람입니다")
+                text = str(data.get("text", ""))
+                if "결정" not in text:
+                    raise ValueError("프로필에 «결정할 일»이 있어야 합니다")
+                f.write_text(text.rstrip() + "\n", encoding="utf-8")
+                save_active()
+                self.js({"ok": True})
             elif self.path == "/api/golden":
                 self.js(freeze_golden(data["run"], data.get("name")))
             else:
@@ -616,7 +808,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
-    RUNS.mkdir(exist_ok=True); GOLDEN.mkdir(exist_ok=True)
+    RUNS.mkdir(exist_ok=True); GOLDEN.mkdir(exist_ok=True); CASES.mkdir(exist_ok=True)
+    if not (CASES / active_case()["id"]).exists():
+        save_active()
     print(f"검토 화면: http://127.0.0.1:{a.port}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", a.port), H).serve_forever()
 

@@ -23,7 +23,7 @@ details.box{padding:.25rem 0}details.box summary{cursor:pointer}aside ol{margin:
 .row{border-top:1px solid var(--rule);padding:.5rem 0}
 @media(max-width:50rem){main{flex-direction:column}aside{width:100%;max-height:45%;border-left:0;border-top:1px solid var(--rule-2)}#evbox{right:1rem;left:1rem;width:auto}}
 </style></head><body>
-<header><b>결과물 검토</b>
+<header><a href="/" style="color:var(--muted)">← 프로젝트</a><b>결과물 검토</b>
 <label>실행 <select id="run"></select></label><label>파일 <select id="file"></select></label>
 <label>비교 <select id="cmp"><option value="">이전 판과 비교 안 함</option></select></label>
 <label>평가자 <input id="who" size="14" placeholder="이름"></label><span class="hint" id="state"></span></header>
@@ -53,7 +53,7 @@ $('#who').onchange=()=>{try{localStorage.setItem('who',$('#who').value)}catch(e)
 const j=async(u,b)=>{const r=await fetch(u,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{});const d=await r.json();if(!r.ok)throw new Error(d.error||'오류');return d};
 const say=m=>$('#msg').textContent=m||'';
 async function loadRuns(pick){const {runs}=await j('/api/runs');const s=$('#run');s.innerHTML=runs.map(r=>`<option value="${r.run}">${r.run}${r.person?' · '+r.person:''}${r.golden?' ★':''}</option>`).join('');
- if(!runs.length){$('#state').textContent='아직 결과물이 없습니다';return}s.value=pick||new URLSearchParams(location.search).get('run')||runs[0].run;await loadRun()}
+ if(!runs.length){$('#state').textContent='아직 결과물이 없습니다. 프로젝트 화면에서 브리핑을 만드세요';return}s.value=pick||new URLSearchParams(location.search).get('run')||runs[0].run;await loadRun()}
 async function loadRun(){cur=await j('/api/run?run='+encodeURIComponent($('#run').value));try{history.replaceState(null,'','?run='+encodeURIComponent(cur.run))}catch(e){}
  $('#file').innerHTML=cur.files.map(f=>`<option>${f}</option>`).join('');
  $('#cmp').innerHTML='<option value="">이전 판과 비교 안 함</option>'+cur.lineage.slice(1).map(r=>`<option value="${r}">${r} 와 비교</option>`).join('');$('#cmp').parentNode.style.display=cur.lineage.length>1?'':'none';$('#yes').classList.toggle('picked',!!cur.verdict?.ok);$('#no').classList.toggle('picked',!!cur.verdict&&!cur.verdict.ok);$('#evbox').style.display='none';
