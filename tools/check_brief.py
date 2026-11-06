@@ -44,6 +44,8 @@ def sentences(text: str) -> list[str]:
 def bare_numbers(s: str) -> list[str]:
     s = ID.sub(" ", s)
     s = re.sub(r"(?<![\d,.])20\d\d(?:[-./]\d{1,2}){0,2}(?!\d)", " ", s)   # 연도 · 날짜
+    s = re.sub(r"\d{1,2}월(?:\s*\d{1,2}일)?|\d{1,2}일|\d{1,2}분기", " ", s)     # 한글 날짜 — 숫자로 검사하지 않는다
+    s = re.sub(r"\d{1,3}\s*(?:개월|주|분)\s*(?:안|내|동안|뒤|전)", " ", s)        # 기간 표현
     return [norm(m) for m in NUM.findall(s)]
 
 
@@ -87,6 +89,12 @@ def main() -> int:
         print(f"입력 오류: {e}", file=sys.stderr)
         return 2
     issues = check(text, rows, {norm(x) for x in a.synthetic.split(",") if x})
+    sel = Path(a.brief).with_name("selection.csv")
+    if sel.exists():
+        with open(sel, encoding="utf-8", newline="") as f:
+            no = {r["evidence_id"].strip() for r in csv.DictReader(f) if r["send"].strip().lower() != "yes"}
+        for i in sorted(no & set(ID.findall(text))):
+            issues.append({"gate": "선별", "sentence": i, "why": "selection.csv 에서 뺀 근거를 브리핑이 인용함"})
     print(json.dumps({"file": a.brief, "issues": issues}, ensure_ascii=False, indent=1))
     return 1 if issues else 0
 
