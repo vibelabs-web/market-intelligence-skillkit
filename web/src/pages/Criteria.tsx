@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { ErrorBox } from "../components/ui";
+import { ErrorBox, when } from "../components/ui";
 
 export default function Criteria() {
   const [d, setD] = useState<any>(null), [edit, setEdit] = useState<string | null>(null), [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export default function Criteria() {
         <ol className="space-y-3">{d.history.slice().reverse().map((h: any, i: number) => (
           <li key={i} className={`rounded-xl border border-rule p-3 text-sm ${h.reverted ? "opacity-60" : ""}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2"><b>{h.reverted ? "되돌림" : `v${h.version}`} · {h.changes.map((c: any) => c.target).join(", ")}</b>
-              <span className="hint">{String(h.at).slice(0, 16).replace("T", " ")} · {h.approver}</span></div>
+              <span className="hint">{when(h.at)} · {h.approver}</span></div>
             <ul className="mt-1 text-ink-2">{h.changes.map((c: any, j: number) => <li key={j}>· {c.reason}</li>)}</ul>
             {h.feedback.length > 0 && <p className="hint mt-1">계기가 된 지적: {h.feedback.join(" / ")}</p>}
             {h.new_run && <p className="mt-1"><Link className="btn-link" to={`/briefs/${h.from_run}`}>{h.from_label}</Link> → <Link className="btn-link" to={`/briefs/${h.new_run}`}>{h.new_label}</Link></p>}

@@ -36,8 +36,6 @@
 - `brief.md` — 브리핑.
 - `run.json` — `{"person":"<id>","parent":"<이전 실행 또는 null>","skill_commit":"<git 짧은 해시>","lens_sha":"<my/lens.md 의 sha256 앞 16자>","evidence_sha":"<evidence-register.csv 의 sha256 앞 16자>"}` — 어떤 기준과 근거로 만든 판인지 남긴다
 
-끝나면 이렇게 알린다: `검토 화면에서 보세요 — http://127.0.0.1:8765/?run=<실행>` (`python3 tools/review_server.py` 가 켜져 있어야 한다)
-
 ## 완료 조건
 - 모든 근거에 판단이 있고, yes 는 브리핑이 쓰거나 쓰지 않은 이유가 있다.
 - 검사 통과 또는 남은 문제 보고.

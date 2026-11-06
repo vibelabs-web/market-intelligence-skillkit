@@ -57,3 +57,4 @@ export function Steps({ steps, names }: { steps: Record<string, boolean>; names:
 }
 export const field = (text: string, key: string) => text.match(new RegExp(`\\*\\*${key}:\\*\\*\\s*(.+)`))?.[1] ?? "";
 export const ago = (t?: string) => { if (!t) return ""; const s = (Date.now() - Date.parse(t)) / 1000; return s < 60 ? "방금" : s < 3600 ? `${Math.round(s / 60)}분 전` : s < 86400 ? `${Math.round(s / 3600)}시간 전` : `${Math.round(s / 86400)}일 전`; };
+export const when = (t?: string) => { if (!t) return ""; const d = new Date(t); return isNaN(+d) ? t : d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }); };

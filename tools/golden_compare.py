@@ -179,10 +179,11 @@ def main() -> int:
         paths = [Path(c) for c in a.results]
         if len({p.resolve() for p in paths}) != len(paths):
             raise OSError("같은 폴더를 여러 번 넣었습니다")
-        rows = load_rows(str(g / "fact-pack/evidence-register.csv" if (g / "fact-pack/evidence-register.csv").exists() else ROOT / "project/fact-pack/evidence-register.csv"))
+        if not (g / "fact-pack/evidence-register.csv").exists():
+            raise OSError("골든 폴더에 fact-pack/evidence-register.csv 가 없습니다 (골든 라이브러리에서 받은 폴더를 그대로 넣으세요)")
+        rows = load_rows(str(g / "fact-pack/evidence-register.csv"))
         grades = json.loads((g / "grades.json").read_text(encoding="utf-8"))
-        person = json.loads((g / "golden.json").read_text(encoding="utf-8")).get("person") if (g / "golden.json").exists() else None
-        prof = g / "profile.md" if (g / "profile.md").exists() else ROOT / f"project/people/{person}.md"
+        prof = g / "profile.md"
         profile = prof.read_text(encoding="utf-8") if prof.exists() else ""
         allowed = {norm(n) for n in NUM.findall(profile)}
         signal_run = a.level == "L2" or any(SID.fullmatch(i) for i in selection(paths[0] / "selection.csv"))

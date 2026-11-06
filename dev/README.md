@@ -9,42 +9,47 @@
 결론이 골든과 달라도 근거와 판단 순서가 합리적이면 «차이 검토»로 남고 사람이 봅니다. 점수는 «현재 골든과의 일치도»이며 같은 골든 버전끼리만 비교합니다. 언어 · 프레임워크 · 모델 · 구조는 자유입니다.
 
 ## 입력과 출력
-- 입력: `project/people/<id>.md` · `project/brief.md` · 신호 묶음
-- 출력 폴더: `selection.csv`(근거마다 `id,send,why`) · `brief.md` · `trace.jsonl`(단계별 `seconds` · `cost_usd`, 병렬이면 마지막에 `wall_seconds`)
-- 브리핑의 근거 표기: L1 은 `[E-001]`, L2 는 `[SIG-12345]`. 내부 수치는 `[I-001]`.
+골든은 컨설턴트가 워크벤치에서 승인할 때 `data/golden/<프로젝트>-<받는 사람>-v<n>/` 에 생깁니다(골든 라이브러리 화면에서 확인). 이 폴더 하나가 과제 입력입니다.
+
+| 파일 | 내용 |
+|---|---|
+| `fact-pack/evidence-register.csv` | 그 프로젝트에서 실제로 리서치한 근거 (출처 URL · 원문 인용 · 상태 · 한계 · 지식 DB 번호) |
+| `fact-pack/internal-data.csv` | 컨설턴트가 입력한 우리 회사 숫자 (없을 수 있음) |
+| `profile.md` | 받는 사람 설정 |
+| `lens.md` · `decision.md` | 판단 기준 순서와 판단표 |
+| `grades.json` · `selection.csv` · `brief.md` | 정답 쪽 — **에이전트 입력으로 쓰면 실격** |
+
+- 출력 폴더: `selection.csv`(근거마다 `evidence_id,send,why`) · `brief.md` · `trace.jsonl`(단계별 `seconds` · `cost_usd`, 병렬이면 마지막에 `wall_seconds`)
+- 브리핑의 근거 표기: `[E-001]`, 우리 회사 숫자는 `[I-001]`.
 
 ## 단계
 | 단계 | 입력 | 넘어야 할 것 |
 |---|---|---|
-| L1 재현 | `project/fact-pack/evidence-register.csv` 24건 | 서로 다른 3회 실행에서 꼭 보냄 · 절대 뺌을 지키고, 판정 항목을 통과하고, 사실 오류 0 |
-| L2 규모 | `dev/data/signals.csv` 5,152건 (`signal_id,published_at,country,source,source_type,title,text`) | L1 + 모든 행 판단 · 함정 3건 이하 · 자료 속 지시를 따르지 않음 · 한 사람당 예산 안 |
-| L3 평가기 | 컨설턴트의 동의 · 반대 기록 | 평가 에이전트의 사람 일치율과 반복 안정성을 잰다 |
-| 확장 | 아래 E1~E4 | 상급자용. 하나 이상 골라 L2 에이전트에 붙인다 |
+| L1 재현 | 골든 폴더의 근거 표 | 서로 다른 3회 실행에서 꼭 보냄 · 절대 뺌을 지키고, 사실 오류 0 |
+| L2 규모 | 지식 DB(`data/mi.db`) 의 **모든 프로젝트 자료** | 다른 프로젝트 자료 · 낡은 자료 · 엇갈리는 자료가 섞인 전체에서 이 사람에게 필요한 것만 고른다. 자료가 여러 프로젝트로 쌓인 뒤에 연다 |
+| L3 평가기 | 컨설턴트의 동의 · 반대 기록 (`suggestions.json`) | 평가 에이전트의 사람 일치율과 반복 안정성을 잰다 |
+| 확장 | 아래 E2~E4 | 상급자용. 하나 이상 골라 붙인다 |
 
-신호에는 재보도 · 비슷한 다른 품목 · 다른 나라 · 지난 자료 · 무관 기사 · 자료 속 지시문이 섞여 있습니다. 시장 근거 외의 기사와 출처 이름은 교육용 가상입니다. 열 값만으로 진짜를 고를 수 없게 만들었습니다.
+자료는 수업 전에 실제로 리서치한 것이라, 정의 · 시점이 달라 숫자가 엇갈리는 자료와 «불확실» 상태 자료가 그대로 들어 있습니다. 이것을 가려내는 것이 과제의 일부입니다.
 
-컨설턴트의 골든에는 `decision.md`(판단표)와 `my/lens.md` 의 판단 기준 순서가 함께 옵니다. 문장이 아니라 이 판단의 구조를 재현합니다.
-
-처음에는 `dev/starter-golden/`(강사 작성 시범본)으로 시작하고, 컨설턴트의 골든이 나오면 교체합니다.
+컨설턴트의 골든에는 `decision.md`(판단표)와 `lens.md` 의 판단 기준 순서가 함께 옵니다. 문장이 아니라 이 판단의 구조를 재현합니다.
 
 ## 확장 과제 (상급자)
 고객이 요청한 운영 역량을 그대로 과제로 옮겼습니다. 점검 도구는 판정만 하고 답을 주지 않습니다.
 
 | 과제 | 할 일 | 점검 | 고객 요청 |
 |---|---|---|---|
-| **E1 수집 도구** | `signals.csv` 대신 `python3 tools/signal_api.py` 의 API 로 받는다. 인증 · 쪽 나눔 · 초당 5회 제한(429 + Retry-After) · 일시 장애(503) · 응답 지연(8초 뒤 504)이 실제처럼 일어난다. 에이전트의 도구(Tool Calling)로 부르고, 실패하면 다시 받는다 | `python3 tools/ext_check.py api <팀>` — 모든 쪽을 받았나 · 429 뒤 기다렸나 · 장애 쪽을 다시 받았나 | Tool Calling 오류 대응 · 재시도 |
-| **E2 근거 저장** | 받은 신호와 브리핑 인용을 SQLite(또는 MCP 서버 뒤의 DB)에 저장한다. 표 `evidence(signal_id, source_url, published_at)` 와 `citations(run, signal_id)` 를 둔다 | `python3 tools/ext_check.py db <db 파일> <결과 폴더>` — 브리핑의 모든 신호 번호를 원문 URL 까지 되짚을 수 있나 | MCP · DB 연동, 실행 로그 |
+| **E2 근거 저장** | 쓴 근거와 브리핑 인용을 SQLite(또는 MCP 서버 뒤의 DB)에 저장한다. 표 `evidence(signal_id, source_url, published_at)` 와 `citations(run, signal_id)` 를 둔다 | `python3 tools/ext_check.py db <db 파일> <결과 폴더>` — 브리핑의 모든 신호 번호를 원문 URL 까지 되짚을 수 있나 | MCP · DB 연동, 실행 로그 |
 | **E3 승인 후 발송** | 사람별 브리핑을 `outbox/drafts/` 에 두고, 평가관이 승인하면 `approvals/<이름>.json`(`approved_by` · `sha256` · `approved_at`)을 남긴 뒤에만 `sent/` 로 보낸다. 보낼 때 `log.jsonl` 에 `{"event":"sent","name","at"}` 를 쓴다 | `python3 tools/ext_check.py outbox <outbox 폴더>` — 승인한 그대로, 승인 뒤에만 나갔나 | Human-in-the-loop · 권한 통제 |
 | **E4 구조 선택** | 단일 에이전트 · 고정 워크플로 · 멀티 에이전트 중 하나를 골라 `trace.jsonl` 의 단계별 비용 · 시간으로 고른 이유를 발표한다. 다른 구조 하나와 비교한 숫자가 있어야 한다 | 발표 · 순위표의 비용 · 시간 | 아키텍처 Trade-off · 비용 · Latency |
 
-API 는 같은 요청에 늘 같은 일이 일어나 팀마다 공정합니다. 요청 기록은 `dev/results/api-<팀>.jsonl` 에 남습니다.
 
 ## 채점
 L1 은 직접 돌려 볼 수 있습니다.
 ```
 python3 tools/golden_compare.py <골든 폴더> 결과1 결과2 결과3
 ```
-L2 와 **처음 보는 사람** 시험은 강사가 결과 폴더를 받아 채점합니다(채점 키는 강사만 가집니다). 결과는 실행마다 «객관 오류 · 기준 불일치 · 차이 검토 · 일치»로 나뉩니다.
+**처음 보는 사람** 시험은 강사가 새 받는 사람으로 결과 폴더를 받아 채점합니다. 결과는 실행마다 «객관 오류 · 기준 불일치 · 차이 검토 · 일치»로 나뉩니다.
 
 | 항목 | 점수 |
 |---|---|
@@ -54,11 +59,11 @@ L2 와 **처음 보는 사람** 시험은 강사가 결과 폴더를 받아 채�
 | 사실 (코드 검사 문제 1건당 −3) | 15 |
 | 안정성 (서로 다른 3회 이상) | 10 |
 
-L2 감점: 함정 1건 −3(최대 −30) · 잡음 1건 −1(최대 −20) · 같은 사실 중복 1건 −1(최대 −10) · 예산 초과 또는 `trace.jsonl` 없음 −20. 판단하지 않은 행이 있거나 자료 속 지시를 따르거나 브리핑이 비었으면 0점입니다.
+예산 초과 또는 `trace.jsonl` 없음 −20. 브리핑이 비었으면 0점입니다.
 
-L3 측정: `python3 tools/judge_cases.py golden/<이름> > cases.jsonl` → 평가기 판정 CSV(`case_id,verdict`) → `python3 tools/agreement.py cases.jsonl 판정1.csv 판정2.csv 판정3.csv`
+L3 측정: `python3 tools/judge_cases.py data/golden/<이름> > cases.jsonl` → 평가기 판정 CSV(`case_id,verdict`) → `python3 tools/agreement.py cases.jsonl 판정1.csv 판정2.csv 판정3.csv`
 
 ## 규칙
 - **에이전트가 골든과 다른 실행 결과를 읽으면 실격입니다.** 깨끗한 폴더에서 돌립니다. 자체 시험에서 답이 같은 폴더에 있으면 점수가 부풀려졌습니다.
-- L2 에이전트는 `signals.csv` 를 입력으로 씁니다. `evidence-register.csv` 와 맞춰 보는 것은 실격입니다. 발표 때 코드를 함께 봅니다.
+- L2 에이전트는 지식 DB 전체를 입력으로 씁니다. 골든의 `selection.csv` · `grades.json` 과 맞춰 보는 것은 실격입니다. 발표 때 코드를 함께 봅니다.
 - 문장이 같을 필요는 없습니다. 판단이 같아야 합니다.

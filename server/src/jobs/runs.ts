@@ -217,7 +217,8 @@ export function revertApplied(newRun: string) {
 
 // ── 골든 ──
 export function listGoldens() {
-  return listDirs(PATHS.golden).map((g) => ({ dir: g, ...readJson<any>(path.join(PATHS.golden, g, "golden.json"), {}) })).filter((g) => g.golden_id);
+  return listDirs(PATHS.golden).map((g) => ({ dir: g, ...readJson<any>(path.join(PATHS.golden, g, "golden.json"), {}) })).filter((g) => g.golden_id)
+    .map((g) => ({ ...g, persona_label: g.scope ? personLabel(g.scope.project, g.scope.persona) : "" }));
 }
 export function freezeGolden(run: string, reason: string, reviewer: string) {
   if (!reason.trim()) throw new Error("왜 이 결과를 승인하는지 한 줄 적어 주세요");

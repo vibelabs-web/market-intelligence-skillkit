@@ -74,7 +74,7 @@ export default function Review() {
       <header className="space-y-2">
         <p className="hint"><Link className="btn-link" to={`/projects/${d.meta.project}`}>{d.project.title}</Link> · 내 판단 기준 v{d.criteria.version}</p>
         <div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-extrabold">{d.label}</h1><Chip s={d.status} /></div>
-        {d.lineage.length > 1 && <p className="text-sm text-muted">이어진 판: {d.lineage.map((l: any, i: number) => <span key={l.run}>{i > 0 && " → "}{l.run === run ? <b>{l.label}</b> : <Link className="btn-link" to={`/briefs/${l.run}`}>{l.label}</Link>}</span>)}</p>}
+        {d.lineage.length > 1 && <p className="text-sm text-muted">이어진 판: {d.lineage.slice().reverse().map((l: any, i: number) => <span key={l.run}>{i > 0 && " → "}{l.run === run ? <b>{l.label}</b> : <Link className="btn-link" to={`/briefs/${l.run}`}>{l.label}</Link>}</span>)}</p>}
         <Steps steps={steps} names={STEP_NAMES} />
       </header>
       <ErrorBox error={error} />
