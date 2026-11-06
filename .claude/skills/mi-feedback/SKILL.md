@@ -10,7 +10,7 @@ disable-model-invocation: true
 결과물을 손으로 고치지 않는다. **결과를 만든 규칙을 고치고 다시 돌린다.** 결과만 고치면 다음 번에 같은 잘못이 나온다.
 
 ## 입력
-`runs/<실행>/feedback.jsonl` · `verdict.json` · 결과물 · `project/people/<id>.md` · `.claude/skills/` · `project/rubric.md` · `shave-log.md`. 피드백이 없으면 검토 화면에서 먼저 남기라고 말하고 멈춘다.
+`runs/<실행>/feedback.jsonl` · `verdict.json` · 결과물 · `project/people/<id>.md` · `playbook/mi-brief.md` · `project/rubric.md` · `shave-log.md`. 피드백이 없으면 검토 화면에서 먼저 남기라고 말하고 멈춘다.
 
 ## 절차
 1. **판단 끌어내기.** 피드백마다 어느 문장 · 무슨 뜻인지 정리한다. «별로다» «못 쓴다»처럼 이유가 없으면 고치기 전에 평가관에게 한 번에 하나씩 묻는다 — 왜 못 씁니까? 어떤 경우라면 보내겠습니까? 다른 고객에게도 같은 기준입니까? 평가관의 말을 그대로 기록한다. 인수에 `바로` 가 있으면 묻지 않고, 추측한 부분을 표시해 넘어간다.
@@ -19,7 +19,7 @@ disable-model-invocation: true
    |---|---|
    | 이 사람의 결정 · 권한 · 관심에 대한 정보 | `project/people/<id>.md` |
    | 평가관 개인의 판단 기준 | `my/lens.md` |
-   | 누구에게나 통할 작업 방식 | `.claude/skills/mi-brief/SKILL.md` |
+   | 누구에게나 통할 작업 방식 | `playbook/mi-brief.md` |
    | 평가 기준 자체 | `project/rubric.md` |
    | 근거 묶음에 자료가 없음 | 수정하지 않고 «자료 부족»으로 보고 |
 3. **규칙으로 바꾸기.** 다른 사례에도 통하는 문장으로 쓴다. 이번 답을 그대로 적지 않는다(나쁜 예: «구리는 13,200달러로 써라» / 좋은 예: «같은 기관의 전망이 여럿이면 최신 판을 쓰고 바뀐 폭을 말한다»).
@@ -35,4 +35,4 @@ disable-model-invocation: true
 같은 피드백이 두 번 해결되지 않으면 멈추고 원인(자료 부족 · 지시 모호 · 모델 한계)을 말한다. 평가 기준을 느슨하게 해 통과시키자고 제안하지 않는다.
 
 ## 권한
-이전 실행과 골든을 고치지 않는다. 쓰기는 `.claude/skills/mi-brief/` · `project/people/` · `project/rubric.md` · `my/` · `runs/<새 실행>/` · `shave-log.md` 만.
+이전 실행과 골든을 고치지 않는다. 쓰기는 `playbook/` · `project/people/` · `project/rubric.md` · `my/` · `runs/<새 실행>/` · `shave-log.md` 만.
