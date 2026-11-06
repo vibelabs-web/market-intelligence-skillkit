@@ -129,7 +129,7 @@ def run_dir(run: str) -> Path:
 
 
 def doc_files(d: Path) -> list[str]:
-    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl", "ui.json", "changes.diff", "proposal.json", "applied.json", "review.md"}
+    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl", "ui.json", "changes.diff", "proposal.json", "applied.json", "review.md", "grades.json"}
     fs = [p.name for p in sorted(d.iterdir()) if p.is_file() and p.name not in hide and not p.name.startswith(".")]
     return sorted(fs, key=lambda n: (not n.startswith("brief"), n))
 
@@ -231,6 +231,19 @@ def next_run(run: str) -> str:
             return name
 
 
+def selection_rows(d: Path) -> list[dict]:
+    p = d / "selection.csv"
+    if not p.exists():
+        return []
+    reg = load_register()
+    with open(p, encoding="utf-8", newline="") as f:
+        out = []
+        for r in csv.DictReader(f):
+            i = (r.get("evidence_id") or "").strip()
+            out.append({"id": i, "send": (r.get("send") or "").strip(), "why": r.get("why") or "", "claim": reg.get(i, {}).get("claim", "")})
+    return out
+
+
 def removed_sentences(before: str, after: str) -> list[str]:
     """before 의 문장 중 after 에 그대로 남지 않은 것"""
     parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", before) if s.strip()]
@@ -303,6 +316,18 @@ def apply_job(run: str) -> None:
         job.update(state="failed", error=str(e)[:300])
 
 
+def board_html() -> str:
+    rows = []
+    for p in sorted((ROOT / "dev/results").glob("*.json")):
+        try:
+            rows.append(json.loads(p.read_text(encoding="utf-8")))
+        except json.JSONDecodeError:
+            pass
+    rows.sort(key=lambda r: (-r.get("score", 0), r.get("cost_usd") or 1e9))
+    body = "".join(f"<tr><td>{i + 1}</td><td>{html.escape(str(r.get('team')))}</td><td>{r.get('score')}</td><td>{html.escape(str(r.get('level')))}</td><td>{html.escape(str(r.get('must')))}</td><td>{html.escape(str(r.get('never')))}</td><td>{r.get('fact_issues')}</td><td>{html.escape(str(r.get('stable')))}</td><td>{r.get('cost_usd')}</td><td>{r.get('seconds')}</td></tr>" for i, r in enumerate(rows))
+    return f"<!doctype html><meta charset=utf-8><title>재현 순위</title>{DOC_CSS}<meta http-equiv=refresh content=15><h1>골든 재현 순위</h1><table><tr><th>순위</th><th>팀</th><th>점수</th><th>단계</th><th>꼭 보냄</th><th>절대 뺌</th><th>사실 오류</th><th>안정성</th><th>비용($)</th><th>시간(초)</th></tr>{body}</table>"
+
+
 def lineage(run: str) -> list[str]:
     seen, cur = [], run
     while cur and cur not in seen and (RUNS / cur).is_dir():
@@ -329,12 +354,16 @@ def freeze_golden(run: str, name: str | None) -> dict:
     v = read_json(d / "verdict.json", {})
     if not v.get("ok"):
         raise ValueError("«납품해도 됨» 판정이 있어야 골든으로 저장합니다")
+    grades = read_json(d / "grades.json", {})
+    if not any(v == "must" for v in grades.values()) or not any(v == "never" for v in grades.values()):
+        raise ValueError("선별 등급에 «꼭 보냄»과 «절대 뺌»을 하나 이상 정해 주세요")
     g = GOLDEN / safe(name or run)
     if g.exists():
         raise ValueError(f"이미 있는 골든입니다: {g.name}")
     g.mkdir(parents=True)
     for f in doc_files(d):
         shutil.copy2(d / f, g / f)
+    (g / "grades.json").write_text(json.dumps(grades, ensure_ascii=False, indent=1), encoding="utf-8")
     history = []
     for r in reversed(lineage(run)):
         history += [dict(x, run=r) for x in read_feedback(RUNS / r)]
@@ -395,10 +424,12 @@ class H(BaseHTTPRequestHandler):
                 d = run_dir(q["run"])
                 ch = d / "changes.diff"
                 self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d), "suggestions": read_suggestions(d),
-                         "ui": read_json(d / "ui.json", {}), "proposal": load_proposal(d), "applied": read_json(d / "applied.json", None), "changes": ch.read_text(encoding="utf-8") if ch.exists() else "", "job": JOBS.get(q["run"]),
+                         "ui": read_json(d / "ui.json", {}), "grades": read_json(d / "grades.json", {}), "selection": selection_rows(d), "proposal": load_proposal(d), "applied": read_json(d / "applied.json", None), "changes": ch.read_text(encoding="utf-8") if ch.exists() else "", "job": JOBS.get(q["run"]),
                          "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"])})
             elif u.path == "/api/evidence":
                 self.js(load_register().get(q["id"]) or {"error": "근거 묶음에 없는 번호입니다"})
+            elif u.path == "/board":
+                self.send(board_html())
             elif u.path == "/doc":
                 self.send(render_doc(run_dir(q["run"]) / safe(q["file"])))
             elif u.path == "/diff":
@@ -444,6 +475,14 @@ class H(BaseHTTPRequestHandler):
                             "at": dt.datetime.now().isoformat(timespec="seconds")}
                     write_feedback(d, read_feedback(d) + [item])
                 self.js(s)
+            elif self.path == "/api/grade":
+                d = run_dir(data["run"])
+                g = read_json(d / "grades.json", {})
+                if data.get("grade") not in ("must", "never", "any"):
+                    raise ValueError("등급은 must · never · any 중 하나입니다")
+                g[str(data["id"])] = data["grade"]
+                (d / "grades.json").write_text(json.dumps(g, ensure_ascii=False, indent=1), encoding="utf-8")
+                self.js(g)
             elif self.path == "/api/reveal":
                 d = run_dir(data["run"])
                 ui = {"revealed": True, "own_feedback": len(read_feedback(d)), "at": dt.datetime.now().isoformat(timespec="seconds")}

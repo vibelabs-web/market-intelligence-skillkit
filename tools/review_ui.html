@@ -27,9 +27,10 @@ aside{width:340px;background:var(--bg);border-left:1px solid var(--line);overflo
 <div id="prop"></div>
 <details id="chg" style="display:none;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:8px"><summary><b>이번 판에서 스킬이 바뀐 곳</b></summary><pre id="chgb" style="white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto"></pre><button id="revert">이 변경 되돌리기</button></details>
 <h3>피드백 <span id="n"></span></h3><div id="list"></div>
+<details id="gr" style="background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:10px"><summary><b>선별 등급 — 개발자가 맞혀야 할 기준</b> <span id="grn" class="hint"></span></summary><div class="hint" style="margin:6px 0">근거마다 이 사람에게 꼭 보낼지, 절대 빼야 할지 정합니다. 애매하면 «상관없음»으로 두세요.</div><div id="grl"></div></details>
 <h3>이 시스템을 고객에게 납품해도 될까요?</h3><textarea id="reason" rows="2" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px" placeholder="이유 한 줄"></textarea>
 <div class="bar" style="margin-top:6px"><button id="no">아직 아님</button><button class="ok" id="yes">납품해도 됨</button></div>
-<div id="cmd"></div><div class="bar" style="margin-top:8px"><button class="pri" id="gold" disabled title="«납품해도 됨» 판정 뒤에 저장할 수 있습니다. 개발자가 재현할 기준이 됩니다.">골든으로 저장</button></div><div class="hint">«납품해도 됨»으로 판정하면 이 결과를 개발자가 재현할 기준으로 저장할 수 있습니다.</div><div id="msg"></div></aside></main>
+<div id="cmd"></div><div class="bar" style="margin-top:8px"><button class="pri" id="gold" disabled title="«납품해도 됨» 판정 뒤에 저장할 수 있습니다. 개발자가 재현할 기준이 됩니다.">골든으로 저장</button></div><div class="hint">«납품해도 됨» 판정과 선별 등급이 있으면 개발자가 재현할 기준으로 저장할 수 있습니다.</div><div id="msg"></div></aside></main>
 <div id="evbox" style="position:fixed;display:none;right:360px;bottom:18px;width:430px;max-height:50vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:12px;z-index:8"></div>
 <div id="pop"><q id="popq"></q><textarea id="popc" placeholder="무엇이 문제이고 어떻게 바뀌어야 하나요?"></textarea>
 <div class="bar"><button class="pri" data-k="fix">고쳐야 함</button><button data-k="remove">빼야 함</button><button data-k="missing">더 있어야 함</button><button data-k="good">좋음 — 유지</button><button id="popx">닫기</button></div></div>
@@ -44,7 +45,7 @@ async function loadRuns(pick){const {runs}=await j('/api/runs');const s=$('#run'
 async function loadRun(){cur=await j('/api/run?run='+encodeURIComponent($('#run').value));try{history.replaceState(null,'','?run='+encodeURIComponent(cur.run))}catch(e){}
  $('#file').innerHTML=cur.files.map(f=>`<option>${f}</option>`).join('');
  $('#cmp').innerHTML='<option value="">이전 판과 비교 안 함</option>'+cur.lineage.slice(1).map(r=>`<option value="${r}">${r} 와 비교</option>`).join('');$('#cmp').parentNode.style.display=cur.lineage.length>1?'':'none';$('#yes').style.outline=cur.verdict?.ok?'3px solid #1f7a3f':'';$('#no').style.outline=cur.verdict&&!cur.verdict.ok?'3px solid #b00020':'';$('#evbox').style.display='none';
- $('#reason').value=cur.verdict?.reason||'';$('#gold').disabled=!cur.verdict?.ok;$('#cmd').style.display='none';$('#state').textContent=cur.verdict?(cur.verdict.ok?'판정: 납품해도 됨':'판정: 아직 아님'):'판정 전';$('#chg').style.display=cur.changes?'':'none';$('#chgb').textContent=cur.changes||'';$('#revert').disabled=!!cur.applied?.reverted;if(cur.job&&cur.job.state==='running')watch(cur.run);show();renderList();renderSugg()}
+ $('#reason').value=cur.verdict?.reason||'';$('#gold').disabled=!cur.verdict?.ok;$('#cmd').style.display='none';$('#state').textContent=cur.verdict?(cur.verdict.ok?'판정: 납품해도 됨':'판정: 아직 아님'):'판정 전';$('#chg').style.display=cur.changes?'':'none';$('#chgb').textContent=cur.changes||'';$('#revert').disabled=!!cur.applied?.reverted;if(cur.job&&cur.job.state==='running')watch(cur.run);show();renderList();renderSugg();renderGrades()}
 function show(){const f=$('#file').value,c=$('#cmp').value;if(!f)return;
  if(c){frame.src=`/diff?a=${encodeURIComponent(c)}&b=${encodeURIComponent(cur.run)}&file=${encodeURIComponent(f)}`;return}
  frame.src=`/doc?run=${encodeURIComponent(cur.run)}&file=${encodeURIComponent(f)}`}
@@ -69,6 +70,10 @@ function paint(){const doc=frame.contentDocument;if(!doc||!doc.body||$('#cmp').v
   const end=i+x.quote.length;for(const [n,o] of m){const a=Math.max(i,o),b=Math.min(end,o+n.nodeValue.length);if(a<b&&n.parentNode){const r=doc.createRange();r.setStart(n,a-o);r.setEnd(n,b-o);const mk=doc.createElement('mark');mk.className='fb'+(x.kind==='good'?' good':'');mk.dataset.id=x.id;try{r.surroundContents(mk)}catch(e){}}}}}
 async function reveal(){cur.ui=await j('/api/reveal',{run:cur.run});renderSugg()}
 $('#reveal').onclick=()=>reveal().catch(e=>say(e.message));$('#revealNow').onclick=()=>reveal().catch(e=>say(e.message));
+function renderGrades(){const G=cur.grades||{},R=cur.selection||[];const n=k=>Object.values(G).filter(v=>v===k).length;$('#grn').textContent=`꼭 ${n('must')} · 뺌 ${n('never')}`;
+ const B=(id,k,l,c)=>`<button data-g="${k}" data-gid="${id}" style="padding:2px 7px;font-size:12px;${G[id]===k?`background:${c};color:#fff`:''}">${l}</button>`;
+ $('#grl').innerHTML=R.map(r=>`<div style="border-top:1px solid var(--line);padding:6px 0"><b>${esc(r.id)}</b> <span class="hint">AI: ${r.send==='yes'?'보냄':'뺌'}</span><div style="font-size:12px">${esc(r.claim)}</div><div class="bar" style="margin-top:3px">${B(r.id,'must','꼭 보냄','#1f7a3f')}${B(r.id,'never','절대 뺌','#b00020')}${B(r.id,'any','상관없음','#555')}</div></div>`).join('')}
+$('#grl').addEventListener('click',async e=>{const k=e.target.dataset.g;if(!k)return;try{cur.grades=await j('/api/grade',{run:cur.run,id:e.target.dataset.gid,grade:k});renderGrades();say('')}catch(err){say(err.message)}});
 function renderProp(){const P=cur.proposal,b=$('#prop');if(!P){b.innerHTML='';return}const NAME={add:'추가',modify:'변경',delete:'삭제'};const cs=P.changes||[];
  let h='<h3>스킬 수정안 — 승인한 것만 바뀝니다</h3>';
  for(const w of P.warnings||[])h+=`<div class="fb" style="border-left-color:#d9822b"><b>확인 필요</b> ${esc(w.message)}</div>`;

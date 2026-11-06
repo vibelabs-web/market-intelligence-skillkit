@@ -68,14 +68,14 @@ class Agreement(unittest.TestCase):
 
 
 class Golden(unittest.TestCase):
-    def test_selection(self):
-        from golden_compare import score_selection
-        g={"E-1":"yes","E-2":"no"}
-        self.assertTrue(score_selection(g,dict(g))["match"])
-        r=score_selection(g,{"E-1":"no","E-2":"yes"})
-        self.assertFalse(r["match"]); self.assertEqual(r["precision"],0.0); self.assertEqual(r["recall"],0.0)
-        self.assertFalse(score_selection(g,{"E-1":"yes"})["match"])
-        self.assertFalse(score_selection(g,{**g,"E-3":"yes"})["match"])
+    def test_grades(self):
+        from golden_compare import score_grades
+        g = {"E-1": "must", "E-2": "never", "E-3": "any"}
+        self.assertTrue(score_grades(g, {"E-1": "yes", "E-2": "no", "E-3": "yes"})["match"])
+        self.assertTrue(score_grades(g, {"E-1": "yes", "E-2": "no", "E-3": "no"})["match"])
+        r = score_grades(g, {"E-1": "no", "E-2": "yes"})
+        self.assertEqual((r["missed"], r["leaked"], r["match"]), (["E-1"], ["E-2"], False))
+        self.assertEqual(score_grades(g, {})["missed"], ["E-1"])
     def test_assertions(self):
         from golden_compare import score_assertions
         A=[{"id":"a","kind":"contains","value":"구리"},{"id":"b","kind":"not_contains","value":"확정"},{"id":"c","kind":"llm","value":"방향"}]
