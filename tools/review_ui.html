@@ -19,19 +19,19 @@ aside{width:340px;background:var(--bg);border-left:1px solid var(--line);overflo
 <main><div id="doc"><iframe id="frame" sandbox="allow-same-origin allow-popups" title="결과물"></iframe></div>
 <aside><details open style="background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px"><summary><b>이렇게 읽어 보세요</b></summary>
 <div class="hint" style="margin-top:6px">받는 사람이 되어 읽고, 걸리는 문장을 드래그하세요.</div>
-<ol style="margin:6px 0 0;padding-left:18px"><li>첫 문단만 읽고 무엇을 할지 알겠나요?</li><li>«그래서 어쩌라고?» 싶은 문장이 있나요?</li><li>이 사람이 몰라도 되는 내용이 있나요?</li><li>근거 번호를 눌러 문장과 원문이 맞는지 보세요.</li><li>이대로 보내면 어디서 망신을 당할까요?</li></ol></details>
+<ol style="margin:6px 0 0;padding-left:18px"><li>첫 문단만 읽고 무엇을 할지 알겠나요?</li><li>«그래서 어쩌라고?» 싶은 문장이 있나요?</li><li>이 사람이 몰라도 되는 내용이 있나요?</li><li>근거 번호를 눌러 문장과 원문이 맞는지 보세요.</li><li>고객에게 납품하면 어디서 막힐까요?</li></ol></details>
 <h3>AI 가 먼저 의심한 곳 <span id="sn"></span></h3><div id="sugg"></div>
 <h3>피드백 <span id="n"></span></h3><div id="list"></div>
-<h3>이 결과를 고객에게 보낼 수 있나요?</h3><textarea id="reason" rows="2" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px" placeholder="이유 한 줄"></textarea>
-<div class="bar" style="margin-top:6px"><button id="no">아직 아님 — 다시 돌리기</button><button class="ok" id="yes">보낼 수 있음</button></div>
-<div id="cmd"></div><div class="bar" style="margin-top:8px"><button class="pri" id="gold" disabled title="«보낼 수 있음» 판정 뒤에 저장할 수 있습니다. 개발자가 재현할 기준이 됩니다.">골든으로 저장</button></div><div class="hint">«보낼 수 있음»으로 판정하면 이 결과를 개발자가 재현할 기준으로 저장할 수 있습니다.</div><div id="msg"></div></aside></main>
+<h3>이 시스템을 고객에게 납품해도 될까요?</h3><textarea id="reason" rows="2" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px" placeholder="이유 한 줄"></textarea>
+<div class="bar" style="margin-top:6px"><button id="no">아직 아님 — 다시 돌리기</button><button class="ok" id="yes">납품해도 됨</button></div>
+<div id="cmd"></div><div class="bar" style="margin-top:8px"><button class="pri" id="gold" disabled title="«납품해도 됨» 판정 뒤에 저장할 수 있습니다. 개발자가 재현할 기준이 됩니다.">골든으로 저장</button></div><div class="hint">«납품해도 됨»으로 판정하면 이 결과를 개발자가 재현할 기준으로 저장할 수 있습니다.</div><div id="msg"></div></aside></main>
 <div id="evbox" style="position:fixed;display:none;right:360px;bottom:18px;width:430px;max-height:50vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:12px;z-index:8"></div>
 <div id="pop"><q id="popq"></q><textarea id="popc" placeholder="무엇이 문제이고 어떻게 바뀌어야 하나요?"></textarea>
 <div class="bar"><button class="pri" data-k="fix">고쳐야 함</button><button data-k="remove">빼야 함</button><button data-k="missing">더 있어야 함</button><button data-k="good">좋음 — 유지</button><button id="popx">닫기</button></div></div>
 <script>
 const $=s=>document.querySelector(s),frame=$('#frame');let cur=null,sel=null;
 try{$('#who').value=localStorage.getItem('who')||''}catch(e){}
-$('#who').onchange=()=>{try{localStorage.setItem('who',$('#who').value)}catch(e){}};
+$('#who').onchange=()=>{try{localStorage.setItem('who',$('#who').value)}catch(e){};$('#state').textContent='평가자 저장됨: '+$('#who').value};
 const j=async(u,b)=>{const r=await fetch(u,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{});const d=await r.json();if(!r.ok)throw new Error(d.error||'오류');return d};
 const say=m=>$('#msg').textContent=m||'';
 async function loadRuns(pick){const {runs}=await j('/api/runs');const s=$('#run');s.innerHTML=runs.map(r=>`<option value="${r.run}">${r.run}${r.person?' · '+r.person:''}${r.golden?' ★':''}</option>`).join('');
@@ -39,7 +39,7 @@ async function loadRuns(pick){const {runs}=await j('/api/runs');const s=$('#run'
 async function loadRun(){cur=await j('/api/run?run='+encodeURIComponent($('#run').value));
  $('#file').innerHTML=cur.files.map(f=>`<option>${f}</option>`).join('');
  $('#cmp').innerHTML='<option value="">이전 판과 비교 안 함</option>'+cur.lineage.slice(1).map(r=>`<option value="${r}">${r} 와 비교</option>`).join('');$('#cmp').parentNode.style.display=cur.lineage.length>1?'':'none';$('#yes').style.outline=cur.verdict?.ok?'3px solid #1f7a3f':'';$('#no').style.outline=cur.verdict&&!cur.verdict.ok?'3px solid #b00020':'';$('#evbox').style.display='none';
- $('#reason').value=cur.verdict?.reason||'';$('#gold').disabled=!cur.verdict?.ok;$('#cmd').style.display='none';$('#state').textContent=cur.verdict?(cur.verdict.ok?'판정: 보낼 수 있음':'판정: 아직 아님'):'판정 전';show();renderList();renderSugg()}
+ $('#reason').value=cur.verdict?.reason||'';$('#gold').disabled=!cur.verdict?.ok;$('#cmd').style.display='none';$('#state').textContent=cur.verdict?(cur.verdict.ok?'판정: 납품해도 됨':'판정: 아직 아님'):'판정 전';show();renderList();renderSugg()}
 function show(){const f=$('#file').value,c=$('#cmp').value;if(!f)return;
  if(c){frame.src=`/diff?a=${encodeURIComponent(c)}&b=${encodeURIComponent(cur.run)}&file=${encodeURIComponent(f)}`;return}
  frame.src=`/doc?run=${encodeURIComponent(cur.run)}&file=${encodeURIComponent(f)}`}
@@ -63,11 +63,11 @@ frame.addEventListener('load',()=>{const doc=frame.contentDocument;if(!doc||!doc
  doc.addEventListener('mouseup',ev=>{if($('#cmp').value)return;const s=doc.getSelection();const q=s?s.toString().trim():'';if(q.length<2)return;
   const r=frame.getBoundingClientRect();const {t}=textMap(doc);let occ=0;const rg=s.getRangeAt(0);const pre=doc.createRange();pre.setStart(doc.body,0);pre.setEnd(rg.startContainer,rg.startOffset);const before=pre.toString();let i=-1;while((i=t.indexOf(q,i+1))>=0&&i<before.length-1)occ++;
   sel={quote:q,occurrence:occ};$('#popq').textContent=q;$('#popc').value='';const p=$('#pop');p.style.display='block';p.style.left=Math.max(8,Math.min(r.left+ev.clientX+8,r.right-330))+'px';p.style.top=Math.min(r.top+ev.clientY+8,innerHeight-210)+'px';$('#popc').focus()})});
-document.querySelectorAll('#pop [data-k]').forEach(b=>b.onclick=async()=>{try{const it=await j('/api/feedback',{run:cur.run,file:$('#file').value,quote:sel.quote,occurrence:sel.occurrence,comment:$('#popc').value,kind:b.dataset.k,reviewer:$('#who').value});cur.feedback.push(it);$('#pop').style.display='none';say('');renderList()}catch(e){say(e.message)}});
+document.querySelectorAll('#pop [data-k]').forEach(b=>b.onclick=async()=>{try{const it=await j('/api/feedback',{run:cur.run,file:$('#file').value,quote:sel.quote,occurrence:sel.occurrence,comment:$('#popc').value,kind:b.dataset.k,reviewer:$('#who').value});cur.feedback.push(it);$('#pop').style.display='none';say('');$('#state').textContent='피드백 저장됨 ('+cur.feedback.length+'건)';renderList()}catch(e){say(e.message)}});
 $('#popx').onclick=()=>$('#pop').style.display='none';
 $('#list').onclick=async e=>{const d=e.target.dataset.del;if(d){await j('/api/feedback/delete',{run:cur.run,id:d});cur.feedback=cur.feedback.filter(x=>x.id!==d);renderList();return}
  const c=e.target.closest('.fb');if(!c)return;const x=cur.feedback.find(i=>i.id===c.dataset.id);if(x&&x.file!==$('#file').value){$('#file').value=x.file;show()}const mk=frame.contentDocument?.querySelector(`mark[data-id="${c.dataset.id}"]`);if(mk){mk.scrollIntoView({block:'center'});mk.classList.add('flash');setTimeout(()=>mk.classList.remove('flash'),1200)}};
-async function verdict(ok){try{cur.verdict=await j('/api/verdict',{run:cur.run,ok,reason:$('#reason').value,reviewer:$('#who').value});$('#gold').disabled=!ok;$('#state').textContent=ok?'판정: 보낼 수 있음':'판정: 아직 아님';const c=$('#cmd');if(ok){c.style.display='none'}else{c.style.display='block';const line='/mi-feedback '+cur.run;c.innerHTML='<div style="margin-bottom:4px">다음 단계 — 지적을 반영해 다시 돌립니다. 아래 문장을 Claude 창에 붙여 넣으세요.</div>'+line+' <button id="cpy" style="margin-left:6px">복사</button>';$('#cpy').onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(line)}$('#yes').style.outline=ok?'3px solid #1f7a3f':'';$('#no').style.outline=ok?'':'3px solid #b00020';say('')}catch(e){say(e.message)}}
+async function verdict(ok){try{cur.verdict=await j('/api/verdict',{run:cur.run,ok,reason:$('#reason').value,reviewer:$('#who').value});$('#gold').disabled=!ok;$('#state').textContent=ok?'판정: 납품해도 됨':'판정: 아직 아님';const c=$('#cmd');if(ok){c.style.display='none'}else{c.style.display='block';const line='/mi-feedback '+cur.run;c.innerHTML='<div style="margin-bottom:4px">다음 단계 — 지적을 반영해 다시 돌립니다. 아래 문장을 Claude 창에 붙여 넣으세요.</div>'+line+' <button id="cpy" style="margin-left:6px">복사</button>';$('#cpy').onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(line)}$('#yes').style.outline=ok?'3px solid #1f7a3f':'';$('#no').style.outline=ok?'':'3px solid #b00020';say('')}catch(e){say(e.message)}}
 $('#no').onclick=()=>verdict(false);$('#yes').onclick=()=>verdict(true);
 $('#gold').onclick=async()=>{try{const g=await j('/api/golden',{run:cur.run});say('');$('#state').textContent='골든 저장: golden/'+g.golden;$('#gold').disabled=true;await loadRuns(cur.run)}catch(e){say(e.message)}};
 $('#run').onchange=loadRun;$('#file').onchange=()=>{show();renderList()};$('#cmp').onchange=show;

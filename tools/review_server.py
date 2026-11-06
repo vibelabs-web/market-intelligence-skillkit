@@ -185,7 +185,7 @@ def freeze_golden(run: str, name: str | None) -> dict:
     d = run_dir(run)
     v = read_json(d / "verdict.json", {})
     if not v.get("ok"):
-        raise ValueError("«고객에게 보낼 수 있음» 판정이 있어야 골든으로 저장합니다")
+        raise ValueError("«납품해도 됨» 판정이 있어야 골든으로 저장합니다")
     g = GOLDEN / safe(name or run)
     if g.exists():
         raise ValueError(f"이미 있는 골든입니다: {g.name}")
