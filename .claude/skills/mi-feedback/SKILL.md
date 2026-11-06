@@ -10,7 +10,7 @@ disable-model-invocation: true
 **너는 스킬을 고치지 않는다.** 수정안만 쓴다. 사람이 승인한 문구만 프로그램이 그대로 바꾼다. 결과물도 손으로 고치지 않는다.
 
 ## 입력
-`runs/<실행>/feedback.jsonl` · `suggestions.jsonl` · `brief.md` · `selection.csv` · `run.json` · `playbook/mi-brief.md` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/fact-pack/` · `project/rubric.md` · `my/lens.md`. 피드백이 없으면 멈춘다. 평가관이 반대(`state: rejected`)한 지적은 반영하지 않고 그 이유(`note`)를 존중한다.
+`runs/<실행>/feedback.jsonl` · `suggestions.jsonl` · `brief.md` · `decision.md` · `selection.csv` · `run.json` · `playbook/mi-brief.md` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/fact-pack/` · `project/rubric.md` · `my/lens.md`. 피드백이 없으면 멈춘다. 평가관이 반대(`state: rejected`)한 지적은 반영하지 않고 그 이유(`note`)를 존중한다.
 
 ## 절차
 1. **지적을 자료와 대조한다.** 지적이 자료와 어긋나면 그대로 받아들이지 말고 `warnings` 에 쓴다. 예: «12월 1일은 근거가 없다»는 지적인데 프로필에 그 날짜가 있으면 «프로필에 있습니다. 그래도 뺄까요?». 평가관의 말을 바꾸어 적지 않는다.
@@ -18,7 +18,7 @@ disable-model-invocation: true
    | 원인 | 처리 |
    |---|---|
    | 이 사람의 결정 · 권한 · 관심 | `project/people/<id>.md` 수정안 |
-   | 평가관 개인의 판단 기준 | `my/lens.md` 수정안 |
+   | 평가관 개인의 판단 기준 · 무엇을 먼저 볼지 | `my/lens.md` 수정안 (결론 방향을 바꾸려면 규칙을 늘리지 말고 판단 기준 순서를 고친다) |
    | 누구에게나 통할 작업 방식 | `playbook/mi-brief.md` 수정안 |
    | 평가 기준 자체 | `project/rubric.md` 수정안 |
    | 필요한 값 · 근거가 없음(금액 · 물량 · 재고 등) | 수정안을 만들지 말고 `needs_data` 에 쓴다. 빈칸 많은 표를 만드는 규칙을 넣지 않는다 |

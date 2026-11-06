@@ -424,6 +424,8 @@ def freeze_golden(run: str, name: str | None) -> dict:
     for f in doc_files(d):
         shutil.copy2(d / f, g / f)
     (g / "grades.json").write_text(json.dumps(grades, ensure_ascii=False, indent=1), encoding="utf-8")
+    if (ROOT / "my/lens.md").exists():
+        shutil.copy2(ROOT / "my/lens.md", g / "lens.md")      # 판단 기준 순서도 재현 대상이다
     history = []
     for r in reversed(lineage(run)):
         history += [dict(x, run=r) for x in read_feedback(RUNS / r)]

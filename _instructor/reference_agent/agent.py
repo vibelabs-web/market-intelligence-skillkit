@@ -129,7 +129,7 @@ JSON 배열만 출력: [{{"id":"...","keep":true,"why":"짧게"}}]
     known = load_rows(str(ROOT / "project/fact-pack/evidence-register.csv"))
     known.update({r["signal_id"]: {"quote": r.get("text", ""), "claim": r.get("title", ""), "status": "confirmed"} for r in rows})
     internal = (ROOT / "project/fact-pack/internal-data.csv").read_text(encoding="utf-8")
-    rules = playbook[playbook.index("2. **판단.**"):playbook.index("4. **검사.**")]
+    rules = playbook[playbook.index("3. **판단.**"):playbook.index("5. **검사.**")]
     notation = playbook[playbook.index("## 표기 규칙"):playbook.index("## 출력")]
     prompt = f"""{GUARD}
 받는 사람에게 보낼 브리핑을 마크다운으로 쓴다. 브리핑 본문만 출력한다. 시장 근거는 [SIG-12345] 처럼 신호 번호로, 내부 수치는 [I-001] 로 표기한다.

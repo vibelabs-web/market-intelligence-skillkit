@@ -8,11 +8,12 @@ context: fork
 # 독립 평가
 
 ## 입력
-`runs/<실행>/brief.md` · `selection.csv` · `run.json` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/rubric.md` · `my/lens.md` · `project/fact-pack/evidence-register.csv` · `project/fact-pack/internal-data.csv`.
+`runs/<실행>/brief.md` · `decision.md` · `selection.csv` · `run.json` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/rubric.md` · `my/lens.md` · `project/fact-pack/evidence-register.csv` · `project/fact-pack/internal-data.csv`.
 
 ## 절차
 1. 근거 ID 를 실제 행과 대조한다. 대조하지 않은 것을 맞다고 쓰지 않는다.
-2. 층별로 PASS · FAIL 과 그 근거 문장을 적는다. 칭찬으로 시작하지 않는다.
+2. 브리핑의 결론이 `decision.md` 의 결론과 같은지, 판단표가 `my/lens.md` 의 순서를 따랐는지 본다. 판단이 틀렸다면 표의 어느 칸이 틀렸는지 짚는다.
+2-1. 층별로 PASS · FAIL 과 그 근거 문장을 적는다. 칭찬으로 시작하지 않는다.
 3. 근거 묶음과 프로필 · 브리프에 있는 사실을 없다고 지적하지 않는다. 지적 전에 입력 파일에서 찾아본다.
 4. 최종 질문에 답한다 — 이 시스템을 고객에게 납품해도 되는가. 안 된다면 이유를 큰 순서로 쓴다.
 
