@@ -15,11 +15,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNS, GOLDEN = ROOT / "runs", ROOT / "golden"
 UI = Path(__file__).with_name("review_ui.html")
+TOKENS = """:root{--paper:oklch(96.5% .008 92);--paper-2:oklch(92.5% .012 88);--surface:oklch(99% .004 92);--ink:oklch(20% .012 60);--ink-2:oklch(30% .012 58);--muted:oklch(44% .014 60);--rule:oklch(78% .014 75);--rule-2:oklch(34% .012 60);
+--accent:oklch(44% .13 32);--accent-ink:oklch(97% .01 90);--focus:oklch(48% .17 32);--ok:oklch(40% .09 150);--ok-soft:oklch(92% .04 150);--bad-soft:oklch(92% .03 32);--mark:oklch(90% .09 90);--mark-ok:oklch(90% .06 150);--ai:oklch(42% .08 250);--warn:oklch(50% .11 70);
+--font:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}"""
 DOC_CSS = """<style>
-body{font:16px/1.7 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:820px;margin:24px auto;padding:0 20px;color:#1c1c20;background:#fff}
-h1{font-size:25px}h2{font-size:20px;margin-top:28px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #ddd;padding:6px 9px;text-align:left;vertical-align:top}th{background:#f4f4f6}
-blockquote{border-left:3px solid #bbb;margin:0;padding-left:14px;color:#555}a.ev{font-size:12px;color:#3556c9;text-decoration:none;background:#eef1fb;border-radius:4px;padding:0 4px}
-mark.fb{background:#ffe58a;cursor:pointer}mark.fb.good{background:#bdeec8}mark.fb.done{background:#e6e6e6}tr.sel-yes td:first-child{border-left:4px solid #2a8f4a}tr.sel-no{color:#777}
+/* Hallmark · theme: newsprint (colour and rules only) · scope: reading document · redesign: restyle · waived: 58 a briefing is read in full; 44b no hero, first screen is the conclusion */
+""" + TOKENS + """
+*{box-sizing:border-box}html,body{overflow-x:clip}
+body{font:400 1.0625rem/1.75 var(--font);max-width:46rem;margin:0 auto;padding:2rem 1.25rem 4rem;color:var(--ink);background:var(--paper);font-variant-numeric:tabular-nums;word-break:keep-all;overflow-wrap:break-word}
+h1{font-size:1.625rem;line-height:1.3;font-weight:700;margin:0 0 1.5rem;padding-bottom:.75rem;border-bottom:3px double var(--rule-2)}
+h2{font-size:1.125rem;line-height:1.4;font-weight:700;margin:2.25rem 0 .75rem;padding-top:.75rem;border-top:1px solid var(--rule)}h1+h2{margin-top:0;padding-top:0;border-top:0}
+h1+h2+p{font-size:1.1875rem;line-height:1.65;font-weight:500}h3,h4{font-size:1rem;margin:1.5rem 0 .5rem}
+p{margin:0 0 1rem}ul,ol{margin:0 0 1rem;padding-left:1.25rem}li{margin-bottom:.625rem}strong{font-weight:700}code{font:.875em var(--mono)}
+blockquote{margin:1rem 0;padding:.75rem 1rem;background:var(--paper-2);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);color:var(--ink-2)}
+.tw{overflow-x:auto;margin:0 0 1rem}table{border-collapse:collapse;width:100%;font-size:.9375rem;line-height:1.55}th,td{border-bottom:1px solid var(--rule);padding:.5rem .75rem .5rem 0;text-align:left;vertical-align:top}th{font-weight:700;border-bottom:1px solid var(--rule-2)}
+h1,h2{text-wrap:balance}a{color:var(--ink)}a:active{color:var(--accent)}a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+a.ev{font-size:.75em;color:var(--muted);text-decoration:underline;text-underline-offset:2px;white-space:nowrap}a.ev:hover{color:var(--accent)}a.ev.none{color:var(--accent);font-weight:700}
+mark.fb{background:var(--mark);color:inherit;cursor:pointer}mark.fb.good{background:var(--mark-ok)}mark.fb.done{background:var(--paper-2)}
+tr.sel-yes td:first-child{font-weight:700}tr.sel-no{color:var(--muted)}
+@media(max-width:40rem){body{font-size:1rem;padding:1.25rem 1rem 3rem}h1{font-size:1.375rem}h1+h2+p{font-size:1.0625rem}}
 </style>"""
 
 
@@ -41,7 +55,7 @@ def inline(s: str, reg: dict) -> str:
     def ev(m):
         r = reg.get(m.group(0))
         if not r:
-            return f'<a class="ev" style="background:#fde3e3;color:#b00" title="근거 묶음에 없는 ID">{m.group(0)}</a>'
+            return f'<a class="ev none" title="근거 묶음에 없는 ID">{m.group(0)}</a>'
         return f'<a class="ev" role="button" style="cursor:pointer">{m.group(0)}</a>'
     return re.sub(r"\b[EI]-\d{3}\b", ev, s)
 
@@ -57,7 +71,7 @@ def md_to_html(text: str, reg: dict) -> str:
         if tbl:
             rows = [[c.strip() for c in r.strip().strip("|").split("|")] for r in tbl]
             body = [r for r in rows if not all(re.fullmatch(r":?-+:?", c or "-") for c in r)]
-            out.append("<table>" + "".join("<tr>" + "".join(f"<{'th' if i == 0 else 'td'}>{inline(c, reg)}</{'th' if i == 0 else 'td'}>" for c in r) + "</tr>" for i, r in enumerate(body)) + "</table>")
+            out.append('<div class="tw"><table>' + "".join("<tr>" + "".join(f"<{'th' if i == 0 else 'td'}>{inline(c, reg)}</{'th' if i == 0 else 'td'}>" for c in r) + "</tr>" for i, r in enumerate(body)) + "</table></div>")
             tbl = []
     for line in text.splitlines():
         s = line.strip()
@@ -94,7 +108,7 @@ def csv_to_html(text: str, reg: dict) -> str:
     idx = head.index("send") if "send" in head else -1
     eid = head.index("evidence_id") if "evidence_id" in head else -1
     extra = ["내용", "출처 · 시점 · 상태"] if eid >= 0 and reg else []
-    h = "<table><tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in head + extra) + "</tr>"
+    h = '<div class="tw"><table><tr>' + "".join(f"<th>{html.escape(c)}</th>" for c in head + extra) + "</tr>"
     for r in body:
         if len(r) > len(head):                       # 쉼표를 따옴표로 감싸지 않은 칸은 마지막 칸에 합친다
             r = r[:len(head) - 1] + [",".join(r[len(head) - 1:])]
@@ -104,7 +118,7 @@ def csv_to_html(text: str, reg: dict) -> str:
             e = reg.get(r[eid].strip(), {}) if eid < len(r) else {}
             cells += f"<td>{html.escape(e.get('claim', ''))}</td><td>{html.escape(e.get('publisher', ''))} · {html.escape(e.get('data_period') or e.get('published_at') or '')} · {html.escape(e.get('status', ''))}</td>"
         h += f"<tr{cl}>{cells}</tr>"
-    return h + "</table>"
+    return h + "</table></div>"
 
 
 def render_doc(path: Path) -> str:
@@ -112,7 +126,7 @@ def render_doc(path: Path) -> str:
     if path.suffix in (".html", ".htm"):
         return text
     body = md_to_html(text, reg) if path.suffix == ".md" else csv_to_html(text, reg) if path.suffix == ".csv" else f"<pre>{html.escape(text)}</pre>"
-    return f"<!doctype html><meta charset=utf-8>{DOC_CSS}<body>{body}</body>"
+    return f'<!doctype html><html lang="ko"><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><meta name="description" content="받는 사람의 결정에 맞춘 개인화 브리핑"><title>{html.escape(path.name)}</title>{DOC_CSS}<body>{body}</body></html>'
 
 
 def safe(name: str) -> str:
@@ -310,6 +324,8 @@ def load_proposal(d: Path) -> dict | None:
         if lost:
             c["removes"] = True                      # 기존 문장이 사라지면 표시한다 — 모델이 add 라고 적어도
             c["removed"] = lost
+    net = sum(len(c.get("after") or "") - len(c.get("before") or "") for c in p.get("changes", []) if str(c.get("file", "")).startswith("playbook/"))
+    p["playbook_growth"] = net                       # 규칙이 얼마나 늘어나는지 평가관에게 보여 준다
     return p
 
 
@@ -369,7 +385,7 @@ def board_html() -> str:
             pass
     rows.sort(key=lambda r: (-r.get("score", 0), r.get("cost_usd") or 1e9))
     body = "".join(f"<tr><td>{i + 1}</td><td>{html.escape(str(r.get('team')))}</td><td>{r.get('score')}</td><td>{'성공' if r.get('reproduced') else '—'}</td><td>{html.escape(str(r.get('level')))}</td><td>{html.escape(str(r.get('must')))}</td><td>{html.escape(str(r.get('never')))}</td><td>{r.get('fact_issues')}</td><td>{html.escape(str(r.get('stable')))}</td><td>{r.get('cost_usd')}</td><td>{r.get('seconds')}</td></tr>" for i, r in enumerate(rows))
-    return f"<!doctype html><meta charset=utf-8><title>재현 순위</title>{DOC_CSS}<meta http-equiv=refresh content=15><h1>골든 재현 순위</h1><table><tr><th>순위</th><th>팀</th><th>점수</th><th>재현</th><th>단계</th><th>꼭 보냄</th><th>절대 뺌</th><th>사실 오류</th><th>안정성</th><th>비용($)</th><th>시간(초)</th></tr>{body}</table>"
+    return f'<!doctype html><html lang="ko"><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><meta name="description" content="에이전트가 골든을 얼마나 재현했는지 보는 순위표"><title>재현 순위</title>{DOC_CSS}<style>body{{max-width:72rem}}</style><meta http-equiv=refresh content=15><body><h1>골든 재현 순위</h1><div class="tw"><table><tr><th>순위</th><th>팀</th><th>점수</th><th>재현</th><th>단계</th><th>꼭 보냄</th><th>절대 뺌</th><th>사실 오류</th><th>안정성</th><th>비용($)</th><th>시간(초)</th></tr>{body}</table></div></body></html>'
 
 
 def lineage(run: str) -> list[str]:
@@ -389,8 +405,8 @@ def diff_html(a: str, b: str) -> str:
         else:
             out += [f"<div class=del>− {html.escape(x)}</div>" for x in al[i1:i2]]
             out += [f"<div class=add>+ {html.escape(x)}</div>" for x in bl[j1:j2]]
-    style = "<style>body{font:15px/1.65 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:900px;margin:20px auto;padding:0 16px}.del{background:#fde7e7;color:#8a1f1f}.add{background:#e2f6e7;color:#14602e}.same{color:#555}</style>"
-    return f"<!doctype html><meta charset=utf-8>{style}" + ("".join(out) or "<p>차이가 없습니다.</p>")
+    style = "<style>" + TOKENS + "html,body{overflow-x:clip}body{font:1rem/1.7 var(--font);max-width:56rem;margin:0 auto;padding:1.5rem 1rem;background:var(--paper);color:var(--ink);font-variant-numeric:tabular-nums}.del{background:var(--bad-soft);color:var(--accent)}.add{background:var(--ok-soft);color:var(--ok)}.same{color:var(--muted)}</style>"
+    return f'<!doctype html><html lang="ko"><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>판 비교</title>{style}' + ("".join(out) or "<p>차이가 없습니다.</p>")
 
 
 def freeze_golden(run: str, name: str | None) -> dict:
@@ -454,7 +470,7 @@ class H(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
         try:
             if u.path == "/":
-                self.send(UI.read_text(encoding="utf-8"))
+                self.send(UI.read_text(encoding="utf-8").replace("/*TOKENS*/", TOKENS))
             elif u.path == "/api/runs":
                 out = []
                 if RUNS.is_dir():
