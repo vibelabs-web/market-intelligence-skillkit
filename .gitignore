@@ -6,3 +6,4 @@ runs/*
 cases/
 project/case.json
 _instructor/
+golden/

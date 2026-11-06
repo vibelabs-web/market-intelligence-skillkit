@@ -331,5 +331,99 @@ class Approval(unittest.TestCase):
         self.assertTrue(self.rs.next_run("zz-test-01").endswith("-02"))
 
 
+class Workbench(unittest.TestCase):
+    """v3 작업실: 골든 버전 · 승인 정책 · 첫 화면 API · 학생 환경"""
+    def setUp(self):
+        import tempfile, shutil, threading, review_server as rs
+        from http.server import ThreadingHTTPServer
+        self.rs = rs; self.tmp = tempfile.TemporaryDirectory(); root = Path(self.tmp.name)
+        real = Path(__file__).resolve().parent.parent
+        shutil.copytree(real / "project", root / "project", ignore=shutil.ignore_patterns("case.json", "_*"))
+        (root / "my").mkdir(); shutil.copy(real / "my/lens.md", root / "my/lens.md")
+        self.saved = (rs.ROOT, rs.RUNS, rs.GOLDEN, rs.CASES)
+        rs.ROOT, rs.RUNS, rs.GOLDEN, rs.CASES = root, root / "runs", root / "golden", root / "cases"
+        for d in (rs.RUNS, rs.GOLDEN, rs.CASES):
+            d.mkdir()
+        rs.JOBS.clear()
+        self.root = root
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), rs.H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+    def tearDown(self):
+        self.srv.shutdown(); self.srv.server_close()
+        self.rs.ROOT, self.rs.RUNS, self.rs.GOLDEN, self.rs.CASES = self.saved
+        self.tmp.cleanup()
+    def call(self, path, body=None):
+        import urllib.request, urllib.error
+        r = urllib.request.Request(self.base + path, json.dumps(body).encode() if body is not None else None, {"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(r) as x:
+                return x.status, json.load(x)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+    def make_run(self, name, parent=None):
+        d = self.rs.RUNS / name; d.mkdir()
+        (d / "brief.md").write_text("# 브리핑\n\n결론은 태국이다 [E-009].\n", encoding="utf-8")
+        (d / "selection.csv").write_text('evidence_id,send,why\nE-009,yes,"x"\nE-024,no,"x"\n', encoding="utf-8")
+        (d / "run.json").write_text(json.dumps({"person": "ceo", "parent": parent, "case": "hanbit"}), encoding="utf-8")
+        (d / "grades.json").write_text(json.dumps({"E-009": "must", "E-024": "never"}), encoding="utf-8")
+        return d
+    def test_old_golden_still_readable(self):
+        g = self.rs.GOLDEN / "old"; g.mkdir()
+        (g / "golden.json").write_text(json.dumps({"golden": "old", "run": "ceo-01", "person": "ceo", "verdict": {"ok": True, "reason": "옛 이유"}}), encoding="utf-8")
+        m = self.rs.list_goldens()[0]
+        self.assertEqual((m["golden_version"], m["status"], m["approval_reason"], m["scope"]["persona"]), (1, "active", "옛 이유", "ceo"))
+    def test_new_golden_version_supersedes(self):
+        self.make_run("ceo-01"); self.make_run("ceo-02", "ceo-01")
+        self.assertEqual(self.call("/api/golden", {"run": "ceo-01"})[0], 400)          # 승인 이유 없으면 거절
+        c1, g1 = self.call("/api/golden", {"run": "ceo-01", "reason": "첫 기준"})
+        c2, g2 = self.call("/api/golden", {"run": "ceo-02", "reason": "둘째 기준"})
+        self.assertEqual((c1, c2, g1["golden_version"], g2["golden_version"], g2["supersedes"]), (200, 200, 1, 2, g1["golden_id"]))
+        st = {m["golden_id"]: m["status"] for m in self.rs.list_goldens()}
+        self.assertEqual(st, {g1["golden_id"]: "superseded", g2["golden_id"]: "active"})
+        self.assertTrue((self.rs.GOLDEN / g2["golden_id"] / "fact-pack/evidence-register.csv").exists())
+        self.assertIn("lens_sha", g2)
+    def test_golden_does_not_need_delivery_verdict(self):
+        self.make_run("ceo-01")
+        self.assertEqual(self.call("/api/golden", {"run": "ceo-01", "reason": "판정과 별개"})[0], 200)
+        self.assertIsNone(json.loads((self.rs.GOLDEN / "hanbit-ceo-v1/golden.json").read_text(encoding="utf-8"))["verdict"])
+    def test_rejected_proposal_cannot_apply(self):
+        d = self.make_run("ceo-01")
+        (d / "proposal.json").write_text(json.dumps({"changes": [{"id": "c1", "file": "my/lens.md", "before": "4. 자사 실적", "after": "4. 자사 실적 (표본 작음)", "decision": "rejected"}]}), encoding="utf-8")
+        code, out = self.call("/api/apply", {"run": "ceo-01"})
+        self.assertEqual(code, 400); self.assertIn("승인한 수정안이 없습니다", out["error"])
+        self.assertNotIn("표본 작음", (self.root / "my/lens.md").read_text(encoding="utf-8"))
+    def test_home_api_shape(self):
+        self.make_run("ceo-01")
+        code, h = self.call("/api/home")
+        self.assertEqual(code, 200)
+        self.assertEqual(h["active"]["id"], "hanbit")
+        self.assertEqual([p["id"] for p in h["case"]["people"]], ["ceo", "procurement", "sales"])
+        r = h["runs"][0]
+        self.assertEqual((r["label"], r["status"]), ("CEO · 첫 번째 브리핑", "검토 필요"))
+        self.assertEqual(h["criteria"]["order"][0], "규제 · 권한으로 막히는가")
+    def test_student_env_without_instructor_key(self):
+        import io, contextlib, golden_compare as gc
+        with tempfile_dir() as t:
+            d = [Path(t) / f"r{i}" for i in range(3)]
+            for i, x in enumerate(d):
+                x.mkdir(); (x / "brief.md").write_text("결론 " * 80 + "abc"[i], encoding="utf-8")
+                (x / "selection.csv").write_text("signal_id,send,why\nSIG-10001,yes,x\n", encoding="utf-8")
+            argv, sys.argv = sys.argv, ["x", "dev/starter-golden/ceo", *map(str, d), "--key", str(Path(t) / "없는-키.json")]
+            err = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                    code = gc.main()
+            finally:
+                sys.argv = argv
+        self.assertEqual(code, 2); self.assertIn("강사 채점", err.getvalue())
+        self.assertFalse((Path(__file__).resolve().parent.parent / "dev/defects/answers.hash.json").exists())
+
+
+def tempfile_dir():
+    import tempfile
+    return tempfile.TemporaryDirectory()
+
+
 if __name__ == "__main__":
     unittest.main()

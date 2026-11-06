@@ -4,6 +4,11 @@
   python3 tools/check_brief.py runs/r1/brief.md [--register project/fact-pack/evidence-register.csv] [--profile project/people/ceo.md]
 
 판단이 필요한 것은 하지 않는다. 종료 코드: 문제 없음 0 · 문제 있음 1 · 입력 오류 2
+
+하드 게이트(객관 오류)로 쓰는 것: G1 근거 번호 · 근거 없는 숫자, G2 미확정 상태의 단정, G3 근거와 다른 숫자, G4 틀린 계산.
+형식 점검: G5 작업용 표시, G6 분량.
+한계 — 글자 대조와 정규식이라 놓치는 것이 있다: 숫자는 맞지만 다른 근거를 인용한 경우, 논리 비약, 권한 밖 행동, 날짜 순서.
+이것들은 사람의 검토나 새 맥락의 평가자(/mi-review)가 본다. «검사 통과»는 «사실이 모두 맞다»는 뜻이 아니다.
 """
 from __future__ import annotations
 import argparse, csv, json, re, sys

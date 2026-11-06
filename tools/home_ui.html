@@ -1,96 +1,187 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>개인화 브리핑</title><link rel="icon" href="data:,">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="주제를 넣으면 사례를 만들고, 받는 사람마다 브리핑을 만들어 검토합니다">
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>Market Intelligence 작업실</title><link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="고객의 결정을 돕는 브리핑을 만들고, 피드백으로 내 판단 기준을 다듬는 작업실">
 <style>
-/* Hallmark · theme: newsprint (colour and rules only) · shape: app screen · redesign: restyle */
+/* Hallmark · theme: custom workbench (UI 시안 v3) · shape: app screen */
 /*TOKENS*/
 *{box-sizing:border-box}html,body{overflow-x:clip}
 body{margin:0;font:400 .9375rem/1.6 var(--font);color:var(--ink);background:var(--paper);font-variant-numeric:tabular-nums;word-break:keep-all;overflow-wrap:break-word}
-header{display:flex;gap:1rem;align-items:center;padding:.625rem 1.25rem;background:var(--surface);border-bottom:3px double var(--rule-2);flex-wrap:wrap}header b{font-size:1.0625rem}header a{color:var(--muted)}
-main{max-width:60rem;margin:0 auto;padding:1.5rem 1.25rem 4rem}
-section{margin:0 0 2rem;padding-top:1rem;border-top:1px solid var(--rule)}
-h2{font-size:1.125rem;margin:0 0 .75rem;text-wrap:balance}h3{font-size:1rem;margin:0 0 .25rem}
-.num{display:inline-block;min-width:1.5rem;font-weight:700;color:var(--accent)}
-.hint{color:var(--muted);font-size:.8125rem}.bad{color:var(--accent)}
-input,textarea,select,button{font:inherit;color:inherit}
-input,textarea,select{width:100%;min-height:2.25rem;padding:.375rem .5rem;border:1px solid var(--rule);border-radius:2px;background:var(--surface)}
-textarea{min-height:5rem;resize:vertical}label{display:block;margin:.75rem 0 .25rem;font-weight:700;font-size:.875rem}
-button{min-height:2.25rem;padding:.375rem .875rem;border:1px solid var(--rule-2);border-radius:2px;background:var(--surface);cursor:pointer}button:hover{background:var(--paper-2)}button:active{background:var(--rule)}
-button.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}button.pri:hover{background:var(--ink)}
-button:disabled,button:disabled:hover{background:var(--paper-2);color:var(--muted);border-color:var(--rule);cursor:not-allowed}
-:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.app{display:grid;grid-template-columns:15rem minmax(0,1fr);min-height:100vh}
+nav.side{background:var(--surface);border-right:1px solid var(--rule);padding:1.25rem .75rem;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:.625rem;align-items:center;padding:0 .5rem 1.25rem}.brand i{width:2rem;height:2rem;border-radius:10px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink);font-style:normal;font-weight:800}
+.brand b{display:block;font-size:.9375rem}.brand small{color:var(--muted);font-size:.6875rem}
+nav.side a{display:flex;align-items:center;gap:.625rem;padding:.5rem .75rem;border-radius:10px;color:var(--ink-2);text-decoration:none;font-size:.875rem;margin-bottom:.125rem}
+nav.side a:hover{background:var(--paper-2)}nav.side a.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+nav.side .sep{margin:1rem .75rem .375rem;color:var(--muted);font-size:.75rem}
+main{padding:1.75rem 2rem 4rem;max-width:72rem;width:100%}
+h1{font-size:1.5rem;margin:0;text-wrap:balance}h2{font-size:1.0625rem;margin:0 0 .75rem;text-wrap:balance}h3{font-size:.9375rem;margin:0 0 .25rem}
+.sub{color:var(--muted);margin:.25rem 0 1.5rem}.hint{color:var(--muted);font-size:.8125rem}.small{font-size:.8125rem}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.25rem 1.5rem;margin-bottom:1.25rem}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:1.25rem}
+.step{display:grid;grid-template-columns:2rem minmax(0,1fr);gap:.75rem;padding:1rem 0;border-top:1px solid var(--rule)}.step:first-child{border-top:0;padding-top:0}
+.step .n{width:1.75rem;height:1.75rem;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:800;font-size:.875rem}
 .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
-.cases{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 1rem}.cases button.on{background:var(--ink);color:var(--accent-ink);border-color:var(--ink)}
-.job{padding:.75rem 1rem;background:var(--surface);border:1px solid var(--rule-2);margin:0 0 1.5rem}.job.fail{border-color:var(--accent)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:1rem}
-.card{background:var(--surface);border:1px solid var(--rule);padding:1rem}
-.facts{display:flex;gap:1.5rem;flex-wrap:wrap;margin:.5rem 0}.facts div b{display:block;font-size:1.375rem}
-.runs{list-style:none;margin:.75rem 0 0;padding:0}.runs li{padding:.375rem 0;border-top:1px solid var(--rule)}.runs a{color:var(--ink)}
-details summary{cursor:pointer;color:var(--muted)}pre{white-space:pre-wrap;font:inherit;font-size:.8125rem;max-height:20rem;overflow:auto}
-.lines{margin:.25rem 0 .75rem;padding-left:1.125rem;font-size:.875rem}
-@media(max-width:40rem){main{padding:1rem 1rem 3rem}}
+button,select,input,textarea{font:inherit;color:inherit}
+button{min-height:2.375rem;padding:.375rem 1rem;border:1px solid var(--rule-2);border-radius:10px;background:var(--surface);cursor:pointer}button:hover{background:var(--paper-2)}button:active{background:var(--rule)}
+button.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700;min-height:2.75rem;padding:.5rem 1.25rem}button.pri:hover{filter:brightness(.92)}
+button.link{border:0;background:none;color:var(--accent);padding:0;min-height:0}button.link:hover{text-decoration:underline;background:none}
+button:disabled,button:disabled:hover{background:var(--paper-2);color:var(--muted);border-color:var(--rule);cursor:not-allowed;filter:none}
+select,input,textarea{width:100%;min-height:2.375rem;padding:.375rem .625rem;border:1px solid var(--rule-2);border-radius:10px;background:var(--surface)}textarea{min-height:6rem;resize:vertical}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.who{display:grid;gap:.5rem}.who label{display:grid;grid-template-columns:1.25rem minmax(0,1fr) auto;gap:.625rem;align-items:start;padding:.625rem .75rem;border:1px solid var(--rule);border-radius:10px;cursor:pointer}
+.who label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}.who input{width:auto;min-height:0;margin-top:.25rem;accent-color:var(--accent)}
+.chip{display:inline-block;padding:.125rem .5rem;border-radius:999px;font-size:.75rem;background:var(--paper-2);color:var(--ink-2);white-space:nowrap}
+.chip.need{background:var(--warn-soft);color:var(--warn)}.chip.ok{background:var(--ok-soft);color:var(--ok)}.chip.work{background:var(--accent-soft);color:var(--accent)}.chip.old{background:var(--paper-2);color:var(--muted)}
+.flow{display:flex;align-items:flex-start;margin-top:.5rem;overflow-x:auto}.flow div{flex:1;min-width:5.5rem;text-align:center;position:relative;font-size:.8125rem;color:var(--muted)}
+.flow div::before{content:"";position:absolute;top:.875rem;left:-50%;width:100%;height:2px;background:var(--rule)}.flow div:first-child::before{display:none}
+.flow b{position:relative;z-index:1;display:grid;place-items:center;width:1.75rem;height:1.75rem;margin:0 auto .375rem;border-radius:50%;background:var(--surface);border:2px solid var(--rule-2);color:var(--muted);font-size:.75rem}
+.flow .done b{background:var(--ok);border-color:var(--ok);color:#fff}.flow .done::before{background:var(--ok)}.flow .now b{border-color:var(--accent);color:var(--accent)}.flow .now{color:var(--accent);font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}.stat{border-radius:10px;padding:.875rem;background:var(--accent-soft)}.stat:nth-child(2){background:var(--ok-soft)}.stat:nth-child(3){background:var(--warn-soft)}
+.stat b{display:block;font-size:1.5rem}.stat span{font-size:.8125rem;color:var(--ink-2)}
+.act{list-style:none;margin:0;padding:0}.act li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;padding:.5rem 0;border-top:1px solid var(--rule);font-size:.875rem}.act li:first-child{border-top:0}
+.banner{border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--accent-soft);border:1px solid var(--accent)}.banner.fail{background:var(--bad-soft);border-color:var(--bad)}
+table{border-collapse:collapse;width:100%;font-size:.875rem}th,td{text-align:left;vertical-align:top;padding:.625rem .5rem;border-top:1px solid var(--rule)}th{color:var(--muted);font-weight:600;border-top:0}
+.tw{overflow-x:auto}ol.order{margin:.25rem 0 1rem;padding-left:1.25rem}ol.order li{padding:.25rem 0}
+details summary{cursor:pointer;color:var(--accent);font-size:.875rem}pre{white-space:pre-wrap;font:inherit;font-size:.8125rem;max-height:22rem;overflow:auto;background:var(--paper);padding:.75rem;border-radius:10px}
+.view{display:none}.view.on{display:block}
+@media(max-width:56rem){.app{grid-template-columns:minmax(0,1fr)}nav.side{position:static;height:auto;display:flex;flex-wrap:wrap;gap:.25rem;padding:.75rem}nav.side .brand,nav.side .sep{display:none}main{padding:1.25rem 1rem 3rem}.stats{grid-template-columns:minmax(0,1fr)}}
 </style></head><body>
-<header><b>개인화 브리핑</b><span class="hint" id="who"></span><a href="/review">검토 화면</a><a href="/board">개발자 순위표</a></header>
+<div class="app">
+<nav class="side" aria-label="메뉴">
+ <div class="brand"><i>MI</i><div><b>Market Intelligence</b><small>내 판단 기준을 다듬는 작업실</small></div></div>
+ <a href="#home" data-v="home">홈</a>
+ <a href="/review">브리핑 검토</a>
+ <a href="#criteria" data-v="criteria">내 판단 기준</a>
+ <a href="#golden" data-v="golden">골든 라이브러리</a>
+ <div class="sep">고급</div>
+ <a href="#cases" data-v="cases">사례 관리</a>
+ <a href="/board">개발자 평가</a>
+</nav>
 <main>
-<div class="job" id="job" style="display:none"></div>
+<div id="banner"></div>
 
-<section>
-<h2><span class="num">1</span> 프로젝트</h2>
-<div class="hint">지금 다루는 사례입니다. 다른 사례로 바꾸거나 새 주제로 만들 수 있습니다.</div>
-<div class="cases" id="cases"></div>
-<details id="newbox"><summary>새 주제로 프로젝트 만들기</summary>
-<label for="topic">어떤 결정을 돕는 브리핑인가요?</label>
-<input id="topic" placeholder="예: 전자부품 제조사의 두 번째 공장, 베트남과 인도 중 어디로">
-<div class="hint">한 줄이면 됩니다. 아래는 비워 두면 AI 가 정하고 무엇을 정했는지 알려 줍니다.</div>
-<label for="customer">고객사와 결정 시점 (선택)</label><input id="customer" placeholder="예: 국내 중견 전자부품사, 내년 3월 이사회">
-<label for="people">브리핑을 받을 사람 2~3명 (선택)</label><input id="people" placeholder="예: 대표 · 생산 책임자 · 구매 책임자">
-<label for="scope">비교 범위 (선택)</label><input id="scope" placeholder="예: 두 나라의 투자 인센티브 · 관세 · 인력 · 경쟁 부품사">
-<div class="row" style="margin-top:1rem"><button class="pri" id="make">프로젝트 만들기</button><span class="hint">공개 자료를 직접 열어 확인하므로 10~30분 걸립니다. 지금 사례는 보관됩니다.</span></div>
-</details>
+<section class="view" id="v-home">
+ <h1>안녕하세요, 컨설턴트님</h1>
+ <p class="sub">고객의 결정을 돕는 브리핑을 만들고, 내 피드백으로 AI 의 판단 기준을 다듬습니다.</p>
+ <div class="card">
+  <div class="step"><span class="n">1</span><div>
+   <h2>어떤 결정을 도울까요?</h2>
+   <div class="row"><b id="caseTitle"></b><button class="link" id="toCases">사례 변경</button></div>
+   <p class="small" id="decision" style="margin:.375rem 0"></p>
+   <details><summary id="evSum"></summary><p class="small" id="situation"></p><pre id="notes"></pre></details>
+  </div></div>
+  <div class="step"><span class="n">2</span><div>
+   <h2>누구의 관점에서 판단할까요?</h2>
+   <div class="who" id="who"></div>
+   <details style="margin-top:.75rem" id="profBox"><summary>이 사람의 결정 · 권한 · 관심사 설정</summary>
+    <p class="hint">받는 사람이 무엇을 언제, 어떤 권한으로 결정하는지 적습니다. 내 판단 기준은 «내 판단 기준»에서 따로 다룹니다.</p>
+    <textarea id="profText" rows="9"></textarea><div class="row" style="margin-top:.5rem"><button id="profSave">저장</button><span class="hint" id="profMsg"></span></div></details>
+  </div></div>
+  <div class="step"><span class="n">3</span><div>
+   <h2>지금 할 일</h2>
+   <div id="todo"></div>
+  </div></div>
+ </div>
+ <div class="card">
+  <div class="row" style="justify-content:space-between"><h2 id="flowTitle">진행 단계</h2><span class="hint">브리핑 → 피드백 → 기준 개선 → 재실행 → 골든</span></div>
+  <div class="flow" id="flow"></div>
+ </div>
+ <div class="grid2">
+  <div class="card"><h2>내 기준 현황</h2><div class="stats" id="stats"></div><p class="hint" style="margin:.75rem 0 0">판단 순서: <span id="orderLine"></span> <a href="#criteria">자세히</a></p></div>
+  <div class="card"><h2>최근 활동</h2><ul class="act" id="act"></ul></div>
+ </div>
 </section>
 
-<section id="s2">
-<h2><span class="num">2</span> 사례 확인</h2>
-<h3 id="title"></h3>
-<p id="situation"></p>
-<div class="facts" id="facts"></div>
-<details><summary>근거 메모 (찾지 못한 것 · 상충 사례)</summary><pre id="notes"></pre></details>
+<section class="view" id="v-criteria">
+ <h1>내 판단 기준</h1>
+ <p class="sub">AI 는 이 순서로 판단합니다. 순서를 바꾸면 결론이 바뀝니다. 피드백으로 승인한 변경은 아래 기록에 쌓입니다.</p>
+ <div class="grid2">
+  <div class="card"><div class="row" style="justify-content:space-between"><h2>지금의 판단 순서</h2><span class="chip work" id="verChip"></span></div><ol class="order" id="order"></ol>
+   <details><summary>직접 고치기</summary><p class="hint">판단 순서와 그 이유, 반드시 지킬 것을 적습니다. 저장하면 변경 기록에 남습니다.</p><textarea id="lensText" rows="14"></textarea><div class="row" style="margin-top:.5rem"><button id="lensSave">저장</button><span class="hint" id="lensMsg"></span></div></details></div>
+  <div class="card"><h2>책임 경계</h2><table><tr><th>무엇</th><th>어디에</th></tr>
+   <tr><td>모두에게 공통인 품질 · 최소 안전 기준</td><td>평가 루브릭</td></tr><tr><td>내가 무엇을 먼저 보는가</td><td><b>내 판단 기준</b></td></tr>
+   <tr><td>받는 사람의 결정 · 시점 · 권한</td><td>받는 사람 설정</td></tr><tr><td>누구에게나 통하는 작업 방법</td><td>공통 작업 규칙</td></tr><tr><td>그때 내가 승인한 결과와 기준</td><td>골든</td></tr></table></div>
+ </div>
+ <div class="card"><h2>내 판단 기준의 변화</h2><div class="tw"><table><thead><tr><th>버전</th><th>어떤 지적을 받았나</th><th>바꾼 기준</th><th>결과</th><th>승인</th></tr></thead><tbody id="hist"></tbody></table></div></div>
 </section>
 
-<section id="s3">
-<h2><span class="num">3</span> 받는 사람마다 브리핑 만들기</h2>
-<div class="hint">프로필이 브리핑을 정합니다. 결정할 일과 날짜가 맞는지 먼저 보고, 다르면 고친 뒤 만드세요. 브리핑이 나오면 검토 화면이 열립니다.</div>
-<div class="grid" id="cards" style="margin-top:1rem"></div>
+<section class="view" id="v-golden">
+ <h1>골든 라이브러리</h1>
+ <p class="sub">골든은 정답지가 아니라 <b>그때 내가 승인한 판단 기준의 기록</b>입니다. 새로 승인하면 새 버전이 되고, 이전 버전은 지워지지 않습니다.</p>
+ <div id="goldens"></div>
 </section>
-</main>
+
+<section class="view" id="v-cases">
+ <h1>사례 관리</h1>
+ <p class="sub">수업에서는 제공된 사례를 씁니다. 새 사례는 공개 자료를 직접 열어 확인하므로 10~30분 걸립니다.</p>
+ <div class="card"><h2>사례 바꾸기</h2><div class="who" id="caseList"></div></div>
+ <div class="card"><h2>새 사례 만들기</h2>
+  <label class="small" for="topic"><b>어떤 결정을 돕는 브리핑인가요?</b></label><input id="topic" placeholder="예: 전자부품 제조사의 두 번째 공장, 베트남과 인도 중 어디로">
+  <label class="small" for="customer"><b>고객사와 결정 시점 (선택)</b></label><input id="customer" placeholder="예: 국내 중견 전자부품사, 내년 3월 이사회">
+  <label class="small" for="ppl"><b>받는 사람 2~3명 (선택)</b></label><input id="ppl" placeholder="예: 대표 · 생산 책임자 · 구매 책임자">
+  <label class="small" for="scope"><b>비교 범위 (선택)</b></label><input id="scope" placeholder="예: 투자 인센티브 · 관세 · 인력 · 경쟁 부품사">
+  <div class="row" style="margin-top:1rem"><button id="make">사례 만들기</button><span class="hint">회사 · 인물 · 내부 수치는 교육용 가상입니다. 실제 고객 정보는 넣지 마세요.</span></div>
+ </div>
+</section>
+</main></div>
 <script>
-const $=s=>document.querySelector(s);let H=null,poll=null;
+const $=s=>document.querySelector(s);let H=null,C=null,G=null,poll=null;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const j=async(u,b)=>{const r=await fetch(u,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{});const d=await r.json();if(!r.ok)throw new Error(d.error||'오류');return d};
-const DOM={demand:'수요',regulation:'규제',competitor:'경쟁',competition:'경쟁',supply:'공급',internal:'내부'};
-function line(text,key){const m=text.match(new RegExp('\\*\\*'+key+':\\*\\*\\s*(.+)'));return m?m[1]:''}
-function render(){const c=H.case;
- $('#cases').innerHTML=H.cases.map(x=>`<button class="${x.active?'on':''}" data-case="${esc(x.id)}" ${x.active?'aria-current="true"':''}>${esc(x.title)}</button>`).join('');
- $('#title').textContent=H.active.title;$('#situation').textContent=c.situation||'사례 설명이 없습니다.';
- $('#facts').innerHTML=`<div><b>${c.evidence}</b><span class="hint">공개 근거</span></div><div><b>${c.uncertain}</b><span class="hint">검토 중 · 불확실</span></div><div><b>${c.people.length}</b><span class="hint">받는 사람</span></div><div class="hint" style="align-self:end">${Object.entries(c.by_domain).map(([k,v])=>`${DOM[k]||k} ${v}`).join(', ')}</div>`;
- $('#notes').textContent=c.notes||'메모가 없습니다.';
- const busy=H.job&&H.job.state==='running';
- $('#cards').innerHTML=c.people.map(p=>{const rs=H.runs.filter(r=>r.person===p.id);return `<div class="card"><h3>${esc(p.title)}</h3>
-  <ul class="lines"><li>${esc(line(p.text,'결정할 일'))}</li><li>${esc(line(p.text,'결정 시점'))}</li></ul>
-  <details><summary>프로필 고치기</summary><textarea data-pt="${esc(p.id)}" rows="9">${esc(p.text)}</textarea><button data-save="${esc(p.id)}" ${busy?'disabled':''}>저장</button></details>
-  <div class="row" style="margin-top:.75rem"><button class="pri" data-brief="${esc(p.id)}" ${busy?'disabled':''}>${rs.length?'새 브리핑 만들기':'브리핑 만들기'}</button><span class="hint">3~6분</span></div>
-  ${rs.length?`<ul class="runs">${rs.map(r=>`<li><a href="/?run=${encodeURIComponent(r.run)}">${esc(r.run)}</a> <span class="hint">${r.verdict?(r.verdict.ok?'납품해도 됨':'아직 아님'):'판정 전'}${r.golden?' · 골든':''}${r.parent?' · 수정판':''}</span></li>`).join('')}</ul>`:''}</div>`}).join('')||'<div class="hint">받는 사람 프로필이 없습니다.</div>';
- $('#make').disabled=busy;document.querySelectorAll('[data-case]').forEach(b=>b.disabled=busy);renderJob()}
-function renderJob(){const J=H.job,b=$('#job');if(!J){b.style.display='none';return}b.style.display='';b.className='job'+(J.state==='failed'?' fail':'');
- if(J.state==='running'){const sec=Math.round(Date.now()/1000-J.started),m=Math.floor(sec/60);b.innerHTML=`<b>${J.no}/${J.of}단계</b> ${esc(J.step)}: ${m?m+'분 ':''}${sec%60}초 지남 <span class="hint">(보통 ${Math.max(1,Math.round(J.eta/60))}분). 창을 닫아도 계속됩니다.</span>`;return}
- if(J.state==='failed'){b.innerHTML=`<b class="bad">실패</b> ${esc(J.error)}`;return}
- b.innerHTML=J.kind==='topic'?'<b>새 프로젝트가 만들어졌습니다.</b> 2에서 사례를, 3에서 받는 사람을 확인하세요.':`<b>브리핑이 나왔습니다.</b> <a href="/?run=${encodeURIComponent(J.new_run||'')}">검토 화면에서 보기</a>`}
-async function load(){H=await j('/api/home');render();if(H.job&&H.job.state==='running')watch()}
-function watch(){clearInterval(poll);poll=setInterval(async()=>{H=await j('/api/home');if(!H.job||H.job.state!=='running'){clearInterval(poll);render();if(H.job&&H.job.kind==='brief'&&H.job.state==='done'&&H.job.new_run)location.href='/?run='+encodeURIComponent(H.job.new_run);return}renderJob()},3000)}
-const fail=e=>{H.job={state:'failed',error:e.message};renderJob()};
-$('#cases').onclick=async e=>{const id=e.target.dataset.case;if(!id||e.target.classList.contains('on'))return;try{await j('/api/case/activate',{id});H.job=null;await load()}catch(err){fail(err)}};
-$('#make').onclick=async()=>{try{H.job=await j('/api/case/new',{topic:$('#topic').value,customer:$('#customer').value,people:$('#people').value,scope:$('#scope').value});$('#newbox').open=false;render();watch()}catch(err){fail(err)}};
-$('#cards').onclick=async e=>{const p=e.target.dataset.brief,s=e.target.dataset.save;try{
- if(p){H.job=await j('/api/brief',{person:p});render();watch()}
- if(s){await j('/api/person/save',{id:s,text:document.querySelector(`[data-pt="${s}"]`).value});await load()}}catch(err){fail(err)}};
-load().catch(fail);
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+const field=(t,k)=>{const m=t.match(new RegExp('\\*\\*'+k+':\\*\\*\\s*(.+)'));return m?m[1]:''};
+const ago=t=>{if(!t)return'';const s=(Date.now()-Date.parse(t))/1000;return s<60?'방금':s<3600?Math.round(s/60)+'분 전':s<86400?Math.round(s/3600)+'시간 전':Math.round(s/86400)+'일 전'};
+const CHIP={'검토 필요':'need','기준 개선 중':'work','생성 중':'work','승인됨':'ok','이전 기준':'old','분석 전':''};
+const chip=s=>`<span class="chip ${CHIP[s]??''}">${esc(s)}</span>`;
+const nameOf=t=>t.split(/\s*[—-]\s*/)[0],whoOf=t=>t.split(/\s*[—-]\s*/)[1]||'';
+function sel(){const ps=H.case.people;let p=store.get('person:'+H.active.id);if(!ps.find(x=>x.id===p))p=ps[0]?.id;return p}
+function latest(p){return H.runs.find(r=>r.person===p)}
+function renderHome(){const c=H.case,p=sel();
+ $('#caseTitle').textContent=H.active.title;
+ $('#decision').textContent=(c.situation||'').split(/(?<=다\.)\s/).slice(0,2).join(' ');
+ $('#evSum').textContent=`근거: 공개 자료 ${c.evidence}건 · 추가 확인 필요 ${c.uncertain}건`;$('#situation').textContent=c.situation;$('#notes').textContent=c.notes||'';
+ $('#who').innerHTML=c.people.map(x=>{const r=latest(x.id);return `<label><input type="radio" name="who" value="${esc(x.id)}" ${x.id===p?'checked':''}><span><b>${esc(nameOf(x.title))}</b> <span class="hint">${esc(whoOf(x.title))}</span><br><span class="small">${esc(field(x.text,'결정할 일'))}</span></span>${chip(r?r.status:'분석 전')}</label>`}).join('');
+ const P=c.people.find(x=>x.id===p);$('#profText').value=P?P.text:'';
+ const r=latest(p),busy=H.job&&H.job.state==='running';
+ if(busy){$('#todo').innerHTML=`<p class="small">AI 가 작업 중입니다. 끝나면 다음 할 일을 안내합니다.</p>`}
+ else if(r&&r.status!=='승인됨'){$('#todo').innerHTML=`<div class="row"><button class="pri" data-go="${esc(r.run)}">${r.status==='기준 개선 중'?'수정안 승인 이어 하기':'브리핑 검토 시작'}</button><span class="small">${esc(r.label)} ${chip(r.status)}</span></div>
+  <p class="hint" style="margin:.75rem 0 0">처음부터 다시 받고 싶으면 <button class="link" data-new="${esc(p)}">새 브리핑 만들기</button> (3~6분)</p>`}
+ else{$('#todo').innerHTML=`<div class="row"><button class="pri" data-new="${esc(p)}">브리핑 만들기</button><span class="hint">예상 3~6분 · 판단표 → 브리핑 → AI 검토</span></div>${r?`<p class="hint" style="margin:.75rem 0 0">최근 결과: ${esc(r.label)} ${chip(r.status)} <button class="link" data-go="${esc(r.run)}">이어 보기</button></p>`:''}`}
+ const st=r?r.steps:{},names=[['brief','브리핑 생성'],['feedback','피드백'],['improve','기준 개선'],['rerun','재실행'],['golden','골든']];let nowSet=false;
+ $('#flowTitle').textContent=`진행 단계 · ${P?nameOf(P.title):''}`;
+ $('#flow').innerHTML=names.map(([k,n])=>{let cl='';if(st[k])cl='done';else if(!nowSet){cl='now';nowSet=true}return `<div class="${cl}"><b>${st[k]?'✓':''}</b>${n}${cl==='now'?'<br><span class="hint">지금</span>':''}</div>`}).join('');
+ const g=H.goldens,act=g.filter(x=>x.status==='active').length;
+ $('#stats').innerHTML=`<div class="stat"><b>v${H.criteria.version}</b><span>내 판단 기준 버전</span></div><div class="stat"><b>${H.criteria.history.filter(h=>!h.reverted).length}건</b><span>승인한 기준 변경</span></div><div class="stat"><b>${act}개</b><span>활성 골든 (전체 ${g.length}버전)</span></div>`;
+ $('#orderLine').textContent=(H.criteria.order||[]).join(' → ')||'아직 정하지 않음';
+ const IC={brief:'브리핑',feedback:'피드백',criteria:'기준',golden:'골든'};
+ $('#act').innerHTML=H.activity.map(e=>`<li><span><span class="chip ${e.kind==='golden'?'ok':e.kind==='criteria'?'work':''}">${IC[e.kind]}</span> ${esc(e.text)}</span><span class="hint">${ago(e.at)}</span></li>`).join('')||'<li><span class="hint">아직 활동이 없습니다. 브리핑을 만들면 여기에 쌓입니다.</span></li>'}
+function renderBanner(){const J=H&&H.job,b=$('#banner');if(!J){b.innerHTML='';return}
+ if(J.state==='running'){const sec=Math.round(Date.now()/1000-J.started),m=Math.floor(sec/60);b.innerHTML=`<div class="banner"><b>${J.no}/${J.of}단계</b> ${esc(J.step)} · ${m?m+'분 ':''}${sec%60}초 <span class="hint">(보통 ${Math.max(1,Math.round(J.eta/60))}분, 창을 닫아도 계속됩니다)</span></div>`;return}
+ if(J.state==='failed'){b.innerHTML=`<div class="banner fail"><b>멈췄습니다.</b> ${esc(J.error)}</div>`;return}
+ if(J.kind==='brief'&&J.new_run&&(H.runs.find(r=>r.run===J.new_run)||{}).status==='검토 필요'){b.innerHTML=`<div class="banner"><div class="row"><b>브리핑이 나왔습니다.</b><button class="pri" data-go="${esc(J.new_run)}">브리핑 검토 시작</button></div></div>`;return}
+ b.innerHTML=J.kind==='topic'&&!H.runs.length?`<div class="banner"><b>새 사례가 만들어졌습니다.</b> 홈에서 받는 사람을 고르고 브리핑을 만드세요.</div>`:''}
+function renderCriteria(){$('#verChip').textContent='v'+C.version;$('#order').innerHTML=C.order.map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="hint">아직 정하지 않았습니다</li>';$('#lensText').value=C.lens;
+ $('#hist').innerHTML=C.history.slice().reverse().map(h=>`<tr><td>${h.reverted?'<span class="chip old">되돌림</span>':'v'+h.version}</td><td>${h.feedback.map(esc).join('<br>')||'<span class="hint">기록 없음</span>'}</td><td>${h.changes.map(c=>`<b>${esc(c.target)}</b> ${esc(c.reason)}`).join('<br>')}</td><td>${h.new_run?`<a href="/?run=${encodeURIComponent(h.new_run)}">${esc(h.new_label)}</a><br><span class="hint">${esc(h.from_label)}에서</span>`:'<span class="hint">다음 브리핑부터 반영</span>'}</td><td>${esc(h.approver)}</td></tr>`).join('')||'<tr><td colspan="5" class="hint">아직 승인한 변경이 없습니다. 브리핑을 검토하고 수정안을 승인하면 여기에 쌓입니다.</td></tr>'}
+function renderGolden(){const L={active:['활성','ok'],superseded:['이전 기준','old'],retired:['폐기','old']};const by={};G.forEach(g=>{const k=(g.scope.case||'')+' · '+(g.scope.persona||'');(by[k]=by[k]||[]).push(g)});
+ $('#goldens').innerHTML=Object.entries(by).map(([k,gs])=>`<div class="card"><h2>${esc(k)}</h2><div class="tw"><table><thead><tr><th>버전</th><th>상태</th><th>승인 이유</th><th>승인</th><th></th></tr></thead><tbody>${gs.map(g=>`<tr><td>v${g.golden_version}</td><td><span class="chip ${(L[g.status]||L.active)[1]}">${(L[g.status]||L.active)[0]}</span></td><td>${esc(g.approval_reason)||'<span class="hint">기록 없음 (이전 형식)</span>'}</td><td class="small">${esc(g.approved_by||'')}<br><span class="hint">${esc((g.approved_at||'').slice(0,16).replace('T',' '))}</span></td><td>${g.run?`<a href="/?run=${encodeURIComponent(g.run)}">결과 보기</a><br>`:''}${g.status==='retired'?`<button class="link" data-gs="${esc(g.dir)}" data-st="active">다시 활성</button>`:`<button class="link" data-gs="${esc(g.dir)}" data-st="retired">폐기</button>`}</td></tr>`).join('')}</tbody></table></div></div>`).join('')||'<div class="card hint">아직 골든이 없습니다. 브리핑을 검토한 뒤 «현재 판단 기준을 골든으로 남기기»를 누르면 여기에 쌓입니다.</div>'}
+function renderCases(){$('#caseList').innerHTML=H.cases.map(c=>`<label><input type="radio" name="case" value="${esc(c.id)}" ${c.active?'checked':''}><span><b>${esc(c.title)}</b></span>${c.active?'<span class="chip ok">지금 사례</span>':''}</label>`).join('');$('#make').disabled=!!(H.job&&H.job.state==='running')}
+async function load(){H=await j('/api/home');renderBanner();renderHome();renderCases();if(H.job&&H.job.state==='running')watch()}
+async function show(){const v=(location.hash||'#home').slice(1);document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.id==='v-'+v));document.querySelectorAll('nav.side a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+ try{if(v==='criteria'){C=await j('/api/criteria');renderCriteria()}if(v==='golden'){G=(await j('/api/goldens')).goldens;renderGolden()}}catch(e){fail(e)}}
+function watch(){clearInterval(poll);poll=setInterval(async()=>{H=await j('/api/home');renderBanner();if(!H.job||H.job.state!=='running'){clearInterval(poll);renderHome();renderCases()}},3000)}
+const fail=e=>{$('#banner').innerHTML=`<div class="banner fail"><b>할 수 없습니다.</b> ${esc(e.message)}</div>`};
+document.addEventListener('click',async e=>{const t=e.target;try{
+ if(t.dataset.go){location.href='/?run='+encodeURIComponent(t.dataset.go);return}
+ if(t.dataset.new){H.job=await j('/api/brief',{person:t.dataset.new});renderBanner();renderHome();watch();return}
+ if(t.dataset.gs){await j('/api/golden/status',{id:t.dataset.gs,status:t.dataset.st});G=(await j('/api/goldens')).goldens;renderGolden();return}
+ if(t.id==='toCases'){location.hash='#cases';return}
+ if(t.id==='profSave'){await j('/api/person/save',{id:sel(),text:$('#profText').value});$('#profMsg').textContent='저장했습니다';await load();return}
+ if(t.id==='lensSave'){C=await j('/api/lens/save',{text:$('#lensText').value});renderCriteria();$('#lensMsg').textContent='저장했습니다. 기록에 남았습니다';return}
+ if(t.id==='make'){H.job=await j('/api/case/new',{topic:$('#topic').value,customer:$('#customer').value,people:$('#ppl').value,scope:$('#scope').value});location.hash='#home';renderBanner();watch();return}
+}catch(err){fail(err)}});
+document.addEventListener('change',async e=>{const t=e.target;try{
+ if(t.name==='who'){store.set('person:'+H.active.id,t.value);renderHome()}
+ if(t.name==='case'){await j('/api/case/activate',{id:t.value});H.job=null;await load()}
+}catch(err){fail(err)}});
+addEventListener('hashchange',show);
+load().then(show).catch(fail);
 </script></body></html>

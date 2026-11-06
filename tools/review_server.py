@@ -8,7 +8,7 @@
   golden/<run>/          만족한 결과의 동결본 (결과물 · 피드백 이력 · 스킬 버전)
 """
 from __future__ import annotations
-import argparse, csv, datetime as dt, difflib, hashlib, html, io, json, os, re, shutil, subprocess, threading, urllib.parse, uuid
+import argparse, csv, datetime as dt, difflib, hashlib, html, io, json, os, re, shutil, subprocess, sys, threading, urllib.parse, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -16,19 +16,20 @@ ROOT = Path(__file__).resolve().parent.parent
 RUNS, GOLDEN = ROOT / "runs", ROOT / "golden"
 UI = Path(__file__).with_name("review_ui.html")
 HOME = Path(__file__).with_name("home_ui.html")
-TOKENS = """:root{--paper:oklch(96.5% .008 92);--paper-2:oklch(92.5% .012 88);--surface:oklch(99% .004 92);--ink:oklch(20% .012 60);--ink-2:oklch(30% .012 58);--muted:oklch(44% .014 60);--rule:oklch(78% .014 75);--rule-2:oklch(34% .012 60);
---accent:oklch(44% .13 32);--accent-ink:oklch(97% .01 90);--focus:oklch(48% .17 32);--ok:oklch(40% .09 150);--ok-soft:oklch(92% .04 150);--bad-soft:oklch(92% .03 32);--mark:oklch(90% .09 90);--mark-ok:oklch(90% .06 150);--ai:oklch(42% .08 250);--warn:oklch(50% .11 70);
---font:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}"""
+TOKENS = """:root{--paper:#f6f6fa;--paper-2:#efeff6;--surface:#ffffff;--ink:#1c1c2b;--ink-2:#34344a;--muted:#6a6a80;--rule:#e4e4ee;--rule-2:#c9c9d8;
+--accent:#6b46e5;--accent-soft:#efeafe;--accent-ink:#ffffff;--focus:#6b46e5;--ok:#1f8a4c;--ok-soft:#e5f5ec;--bad:#c2410c;--bad-soft:#fdeee6;--mark:#fff1b8;--mark-ok:#d5f2e0;--ai:#3b5bdb;--warn:#b45309;--warn-soft:#fff4e0;
+--radius:12px;--shadow:0 1px 2px rgba(28,28,43,.06),0 4px 16px rgba(28,28,43,.05);
+--font:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard','Malgun Gothic','Noto Sans KR',sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}"""
 DOC_CSS = """<style>
-/* Hallmark · theme: newsprint (colour and rules only) · scope: reading document · redesign: restyle · waived: 58 a briefing is read in full; 44b no hero, first screen is the conclusion */
+/* Hallmark · theme: custom workbench (UI 시안 v3) · scope: reading document · redesign: restyle · waived: 58 a briefing is read in full; 44b no hero, first screen is the conclusion */
 """ + TOKENS + """
 *{box-sizing:border-box}html,body{overflow-x:clip}
-body{font:400 1.0625rem/1.75 var(--font);max-width:46rem;margin:0 auto;padding:2rem 1.25rem 4rem;color:var(--ink);background:var(--paper);font-variant-numeric:tabular-nums;word-break:keep-all;overflow-wrap:break-word}
-h1{font-size:1.625rem;line-height:1.3;font-weight:700;margin:0 0 1.5rem;padding-bottom:.75rem;border-bottom:3px double var(--rule-2)}
-h2{font-size:1.125rem;line-height:1.4;font-weight:700;margin:2.25rem 0 .75rem;padding-top:.75rem;border-top:1px solid var(--rule)}h1+h2{margin-top:0;padding-top:0;border-top:0}
+body{font:400 1.0625rem/1.75 var(--font);max-width:46rem;margin:0 auto;padding:2rem 1.5rem 4rem;color:var(--ink);background:var(--surface);font-variant-numeric:tabular-nums;word-break:keep-all;overflow-wrap:break-word}
+h1{font-size:1.5rem;line-height:1.35;font-weight:800;margin:0 0 1.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--rule)}
+h2{font-size:1.125rem;line-height:1.4;font-weight:800;margin:2.25rem 0 .75rem;padding-top:.75rem;border-top:1px solid var(--rule)}h1+h2{margin-top:0;padding-top:0;border-top:0}
 h1+h2+p{font-size:1.1875rem;line-height:1.65;font-weight:500}h3,h4{font-size:1rem;margin:1.5rem 0 .5rem}
 p{margin:0 0 1rem}ul,ol{margin:0 0 1rem;padding-left:1.25rem}li{margin-bottom:.625rem}strong{font-weight:700}code{font:.875em var(--mono)}
-blockquote{margin:1rem 0;padding:.75rem 1rem;background:var(--paper-2);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);color:var(--ink-2)}
+blockquote{margin:1rem 0;padding:.75rem 1rem;background:var(--warn-soft);border-radius:10px;color:var(--ink-2)}
 .tw{overflow-x:auto;margin:0 0 1rem}table{border-collapse:collapse;width:100%;font-size:.9375rem;line-height:1.55}th,td{border-bottom:1px solid var(--rule);padding:.5rem .75rem .5rem 0;text-align:left;vertical-align:top}th{font-weight:700;border-bottom:1px solid var(--rule-2)}
 h1,h2{text-wrap:balance}a{color:var(--ink)}a:active{color:var(--accent)}a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 a.ev{font-size:.75em;color:var(--muted);text-decoration:underline;text-underline-offset:2px;white-space:nowrap}a.ev:hover{color:var(--accent)}a.ev.none{color:var(--accent);font-weight:700}
@@ -293,9 +294,32 @@ def case_runs(cid: str) -> list[dict]:
         for d in sorted((x for x in RUNS.iterdir() if x.is_dir()), key=lambda x: x.stat().st_mtime, reverse=True):
             m = read_json(d / "run.json", {})
             if (m.get("case") or DEFAULT_CASE["id"]) == cid and (d / "brief.md").exists():
-                out.append({"run": d.name, "person": m.get("person"), "parent": m.get("parent"), "verdict": read_json(d / "verdict.json", None),
+                out.append({"run": d.name, "label": run_label(d.name), "status": run_status(d.name), "person": m.get("person"), "parent": m.get("parent"), "verdict": read_json(d / "verdict.json", None),
+                            "steps": run_steps(d.name),
                             "golden": (GOLDEN / d.name).exists(), "feedback": len(read_feedback(d))})
     return out
+
+
+def run_steps(run: str) -> dict:
+    """작업 흐름 5단계 중 어디까지 왔나: 브리핑 생성 · 피드백 · 기준 개선 · 재실행 · 골든"""
+    lin = lineage(run)
+    return {"brief": True, "feedback": any(read_feedback(RUNS / r) for r in lin), "improve": any((RUNS / r / "applied.json").exists() for r in lin),
+            "rerun": len(lin) > 1, "golden": any(m.get("run") in lin for m in list_goldens())}
+
+
+def activity(cid: str) -> list[dict]:
+    ev = []
+    for r in case_runs(cid):
+        d = RUNS / r["run"]
+        ev.append({"at": dt.datetime.fromtimestamp(d.stat().st_mtime).isoformat(timespec="seconds"), "kind": "brief", "text": f"{r['label']}가 나왔습니다", "run": r["run"]})
+        for f in read_feedback(d):
+            ev.append({"at": f.get("at", ""), "kind": "feedback", "text": f"{r['label']}에 피드백: {(f.get('comment') or '')[:40]}", "run": r["run"]})
+    for h in applied_history():
+        ev.append({"at": h["at"], "kind": "criteria", "text": f"기준 변경 승인: {', '.join(c['target'] for c in h['changes'])}" + (" (되돌림)" if h["reverted"] else ""), "run": h["new_run"]})
+    for m in list_goldens():
+        if m["scope"].get("case") == cid:
+            ev.append({"at": m.get("approved_at") or "", "kind": "golden", "text": f"골든 v{m['golden_version']} 저장: {m.get('approval_reason', '')[:40]}", "run": m.get("run")})
+    return sorted(ev, key=lambda e: e["at"], reverse=True)[:8]
 
 
 def new_run_name(person: str) -> str:
@@ -350,7 +374,7 @@ def brief_job(person: str) -> None:
         if not made:
             raise RuntimeError("브리핑을 만들지 못했습니다. " + out[-300:])
         meta = read_json(RUNS / made[-1] / "run.json", {})
-        meta.update(person=person, case=active_case()["id"])
+        meta.update(person=person, case=active_case()["id"], parent=None)      # 새로 만든 브리핑은 첫 판이다. 모델이 적은 이전 판을 믿지 않는다
         (RUNS / made[-1] / "run.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         job.update(step="판정 에이전트가 새 맥락에서 읽는 중", no=2, of=2, eta=100, started=dt.datetime.now().timestamp())
         claude_run(f"/mi-review {made[-1]}")
@@ -458,6 +482,7 @@ def load_proposal(d: Path) -> dict | None:
     for i, c in enumerate(p.get("changes", [])):
         c["id"] = str(c.get("id", f"c{i + 1}"))
         c["problem"] = check_change(ROOT, c)
+        c["target"] = TARGET_NAME.get(next((k for k in TARGET_NAME if str(c.get("file", "")).startswith(k)), ""), str(c.get("file", "")))
         after, before = c.get("after") or "", c.get("before") or ""
         lost = removed_sentences(before, after)
         if lost:
@@ -515,6 +540,17 @@ def apply_job(run: str) -> None:
         job.update(state="failed", error=str(e)[:300])
 
 
+def parent_feedback(d: Path) -> list[dict]:
+    """이전 판의 지적이 새 판에서 해결됐는지 보려고 가져온다. 문장이 그대로 남았는지는 자동으로 표시한다"""
+    parent = read_json(d / "run.json", {}).get("parent")
+    if not parent or not (RUNS / parent).is_dir():
+        return []
+    text = (d / "brief.md").read_text(encoding="utf-8") if (d / "brief.md").exists() else ""
+    resolved = (read_json(d / "ui.json", {}) or {}).get("resolved", {})
+    return [{"id": x["id"], "quote": x.get("quote", ""), "comment": x.get("comment", ""), "category": x.get("category"), "still_there": bool(x.get("quote")) and x["quote"] in text,
+             "state": resolved.get(x["id"])} for x in read_feedback(RUNS / parent) if x.get("kind") != "good"]
+
+
 def board_html() -> str:
     rows = []
     for p in sorted((ROOT / "dev/results").glob("*.json")):
@@ -529,8 +565,9 @@ def board_html() -> str:
 
 def lineage(run: str) -> list[str]:
     seen, cur = [], run
-    while cur and cur not in seen and (RUNS / cur).is_dir():
-        seen.append(cur)
+    case = (read_json(RUNS / run / "run.json", {}) or {}).get("case") or "hanbit"
+    while cur and cur not in seen and (RUNS / cur).is_dir() and ((read_json(RUNS / cur / "run.json", {}) or {}).get("case") or "hanbit") == case:
+        seen.append(cur)                             # 다른 사례의 실행은 이전 판으로 잇지 않는다
         cur = read_json(RUNS / cur / "run.json", {}).get("parent")
     return seen
 
@@ -548,15 +585,56 @@ def diff_html(a: str, b: str) -> str:
     return f'<!doctype html><html lang="ko"><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>판 비교</title>{style}' + ("".join(out) or "<p>차이가 없습니다.</p>")
 
 
-def freeze_golden(run: str, name: str | None) -> dict:
+def sha_of(rel: str | None, n: int = 16) -> str | None:
+    p = ROOT / rel if rel else None
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:n] if p and p.is_file() else None
+
+
+def golden_meta(g: Path) -> dict:
+    """옛 골든도 읽는다. 없는 필드는 기본값으로 채운다"""
+    m = read_json(g / "golden.json", {})
+    person = m.get("person") or (m.get("scope") or {}).get("persona")
+    case = (m.get("case") or {}).get("id") if isinstance(m.get("case"), dict) else m.get("case")
+    m.setdefault("golden_id", g.name)
+    m.setdefault("golden_version", 1)
+    m.setdefault("status", "active")
+    m.setdefault("scope", {"case": case or DEFAULT_CASE["id"], "persona": person})
+    m.setdefault("approved_at", m.get("at"))
+    m.setdefault("approval_reason", (m.get("verdict") or {}).get("reason", ""))
+    m["dir"] = g.name
+    return m
+
+
+def list_goldens() -> list[dict]:
+    if not GOLDEN.is_dir():
+        return []
+    out = [golden_meta(g) for g in GOLDEN.iterdir() if g.is_dir() and (g / "golden.json").exists()]
+    return sorted(out, key=lambda m: (str(m["scope"].get("case")), str(m["scope"].get("persona")), -int(m["golden_version"])))
+
+
+def decision_date(person: str | None) -> str | None:
+    f = ROOT / f"project/people/{person}.md"
+    if not person or not f.exists():
+        return None
+    m = re.search(r"결정 시점:\*\*\s*(\d{4}-\d{2}-\d{2})", f.read_text(encoding="utf-8"))
+    return m.group(1) if m else None
+
+
+def freeze_golden(run: str, name: str | None = None, reason: str = "", reviewer: str = "") -> dict:
+    """현재 판단 기준의 스냅샷을 새 버전으로 남긴다. 납품 판정과는 별개다. 같은 사람 · 사례의 이전 활성 골든은 «이전 기준»이 된다"""
     d = run_dir(run)
-    v = read_json(d / "verdict.json", {})
-    if not v.get("ok"):
-        raise ValueError("«납품해도 됨» 판정이 있어야 골든으로 저장합니다")
+    if not reason.strip():
+        raise ValueError("왜 이 결과를 승인하는지 한 줄 적어 주세요")
     grades = read_json(d / "grades.json", {})
     if not any(v == "must" for v in grades.values()) or not any(v == "never" for v in grades.values()):
-        raise ValueError("선별 등급에 «꼭 보냄»과 «절대 뺌»을 하나 이상 정해 주세요")
-    g = GOLDEN / safe(name or run)
+        raise ValueError("«누구에게 보내나»에서 꼭 보낼 근거와 절대 뺄 근거를 하나 이상 정해 주세요")
+    meta = read_json(d / "run.json", {})
+    person, case = meta.get("person"), meta.get("case") or active_case()["id"]
+    family = safe(f"{case}-{person}")
+    same = [m for m in list_goldens() if m["scope"].get("case") == case and m["scope"].get("persona") == person]
+    version = max([int(m["golden_version"]) for m in same] or [0]) + 1
+    prev = next((m for m in same if m["status"] == "active"), None)
+    g = GOLDEN / f"{family}-v{version}"
     if g.exists():
         raise ValueError(f"이미 있는 골든입니다: {g.name}")
     g.mkdir(parents=True)
@@ -564,9 +642,8 @@ def freeze_golden(run: str, name: str | None) -> dict:
         shutil.copy2(d / f, g / f)
     (g / "grades.json").write_text(json.dumps(grades, ensure_ascii=False, indent=1), encoding="utf-8")
     shutil.copytree(ROOT / "project/fact-pack", g / "fact-pack")      # 다른 사례로 바뀌어도 이 골든의 근거로 채점한다
-    if person_file := (ROOT / f"project/people/{read_json(d / 'run.json', {}).get('person')}.md"):
-        if person_file.exists():
-            shutil.copy2(person_file, g / "profile.md")
+    if person and (ROOT / f"project/people/{person}.md").exists():
+        shutil.copy2(ROOT / f"project/people/{person}.md", g / "profile.md")
     if (ROOT / "my/lens.md").exists():
         shutil.copy2(ROOT / "my/lens.md", g / "lens.md")      # 판단 기준 순서도 재현 대상이다
     history = []
@@ -577,21 +654,129 @@ def freeze_golden(run: str, name: str | None) -> dict:
     for r in reversed(lineage(run)):
         labels += [dict(x, run=r) for x in read_suggestions(RUNS / r) if x.get("state")]
     (g / "judge-labels.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in labels), encoding="utf-8")
-    meta = read_json(d / "run.json", {})
-    def sha(rel):
-        p = ROOT / rel if rel else None
-        return hashlib.sha256(p.read_bytes()).hexdigest()[:12] if p and p.is_file() else None
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from check_brief import check, load_rows
+        issues = check((d / "brief.md").read_text(encoding="utf-8"), load_rows(str(ROOT / "project/fact-pack/evidence-register.csv")))
+    except Exception as e:                           # 검사를 못 해도 저장은 한다. 못 한 이유를 남긴다
+        issues = [{"gate": "검사 실패", "why": str(e)[:200]}]
+    (g / "objective-checks.json").write_text(json.dumps({"issues": issues, "note": "check_brief 의 코드 검사 결과. 판단의 옳고 그름이 아니다"}, ensure_ascii=False, indent=1), encoding="utf-8")
+    notes = ["# 비교 메모", "", f"- 승인 이유: {reason.strip()}", f"- 판단 흐름: {' → '.join(reversed(lineage(run)))}"]
+    if prev:
+        notes.append(f"- 대체한 골든: {prev['golden_id']} (v{prev['golden_version']}) — 그 승인 이유: {prev.get('approval_reason') or '기록 없음'}")
+    if (d / "decision.md").exists():
+        notes += ["", "## 판단표", "", (d / "decision.md").read_text(encoding="utf-8")]
+    (g / "comparison-notes.md").write_text("\n".join(notes) + "\n", encoding="utf-8")
     try:
         commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     except OSError:
         commit = ""
-    person = meta.get("person")
-    manifest = {"golden": g.name, "run": run, "case": active_case(), "lineage": lineage(run), "person": person, "verdict": v, "skill_commit": meta.get("skill_commit") or commit,
-                "at": dt.datetime.now().isoformat(timespec="seconds"),
-                "inputs": {"profile": f"project/people/{person}.md" if person else None, "profile_sha": sha(f"project/people/{person}.md") if person else None,
-                           "evidence": "project/fact-pack/evidence-register.csv", "evidence_sha": sha("project/fact-pack/evidence-register.csv")}}
+    now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    manifest = {"golden_id": g.name, "golden_version": version, "status": "active", "supersedes": prev["golden_id"] if prev else None,
+                "scope": {"case": case, "persona": person, "decision_date": decision_date(person)},
+                "approved_by": reviewer or "컨설턴트", "approved_at": now, "approval_reason": reason.strip(),
+                "skill_commit": meta.get("skill_commit") or commit, "lens_sha": sha_of("my/lens.md"), "evidence_sha": sha_of("project/fact-pack/evidence-register.csv"),
+                "objective_checks": "objective-checks.json", "comparison_notes": "comparison-notes.md",
+                "golden": g.name, "run": run, "case": active_case(), "lineage": lineage(run), "person": person, "verdict": read_json(d / "verdict.json", None), "at": now,
+                "inputs": {"profile": f"project/people/{person}.md" if person else None, "profile_sha": sha_of(f"project/people/{person}.md", 12) if person else None,
+                           "evidence": "project/fact-pack/evidence-register.csv", "evidence_sha": sha_of("project/fact-pack/evidence-register.csv", 12)}}
     (g / "golden.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
+    if prev:
+        set_golden_status(prev["dir"], "superseded")
     return manifest
+
+
+def set_golden_status(dirname: str, status: str) -> dict:
+    if status not in ("active", "superseded", "retired"):
+        raise ValueError("상태는 active · superseded · retired 중 하나입니다")
+    g = GOLDEN / safe(dirname)
+    m = read_json(g / "golden.json", None)
+    if m is None:
+        raise ValueError("없는 골든입니다")
+    m["status"] = status
+    (g / "golden.json").write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
+    return golden_meta(g)
+
+
+ORD = ["첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"]
+
+
+def person_label(person: str | None) -> str:
+    f = ROOT / f"project/people/{person}.md"
+    if person and f.exists():
+        head = (f.read_text(encoding="utf-8").splitlines() or [""])[0].lstrip("# ").strip()
+        return re.split(r"\s*[—-]\s*", head)[0] or person
+    return person or ""
+
+
+def run_label(run: str) -> str:
+    m = read_json(RUNS / run / "run.json", {})
+    n = len(lineage(run))
+    return f"{person_label(m.get('person'))} · {ORD[n - 1] if n <= len(ORD) else n} 번째 브리핑"
+
+
+def run_status(run: str) -> str:
+    """분석 전 / 생성 중 / 검토 필요 / 기준 개선 중 / 승인됨"""
+    d = RUNS / run
+    job = JOBS.get(run)
+    if job and job.get("state") == "running":
+        return "기준 개선 중" if job.get("kind") in (None, "apply", "propose") else "생성 중"
+    if (read_json(d / "verdict.json", {}) or {}).get("ok") or any(m.get("run") == run for m in list_goldens()):
+        return "승인됨"
+    if any((read_json(x / "run.json", {}) or {}).get("parent") == run for x in RUNS.iterdir() if x.is_dir()):
+        return "이전 기준"                           # 승인한 기준으로 다음 판을 받았다
+    p = read_json(d / "proposal.json", None)
+    if p and p.get("changes"):
+        return "기준 개선 중"
+    return "검토 필요"
+
+
+def applied_history() -> list[dict]:
+    """승인한 기준 변경의 기록. 실행 기록에서만 읽고 없는 것은 지어내지 않는다"""
+    rows = []
+    if not RUNS.is_dir():
+        return rows
+    for d in RUNS.iterdir():
+        a = read_json(d / "applied.json", None)
+        if not a:
+            continue
+        src = RUNS / str(a.get("from_run"))
+        prop = read_json(src / "proposal.json", {}) or {}
+        fb = {x["id"]: x for x in read_feedback(src)}
+        changes = [c for c in prop.get("changes", []) if c.get("decision") == "approved"]
+        rows.append({"at": dt.datetime.fromtimestamp(d.stat().st_mtime).isoformat(timespec="seconds"), "from_run": a.get("from_run"), "new_run": d.name,
+                     "from_label": run_label(a["from_run"]) if (RUNS / str(a.get("from_run"))).is_dir() else a.get("from_run"), "new_label": run_label(d.name),
+                     "commit": a.get("commit"), "reverted": bool(a.get("reverted")),
+                     "feedback": [fb[i].get("comment") or fb[i].get("quote") for c in changes for i in c.get("from_feedback", []) if i in fb][:3],
+                     "changes": [{"target": TARGET_NAME.get(next((k for k in TARGET_NAME if str(c.get("file", "")).startswith(k)), ""), c.get("file")), "reason": c.get("reason", "")} for c in changes],
+                     "approver": ", ".join(sorted({c.get("decided_by") or "컨설턴트" for c in changes}))})
+    log = git("log", "--format=%h|%cI|%s", "--", "my/lens.md").stdout.splitlines()
+    for line in log:
+        h, at, subj = (line.split("|", 2) + ["", ""])[:3]
+        if subj.startswith("내 판단 기준 직접 수정"):
+            rows.append({"at": at[:19], "from_run": None, "new_run": None, "from_label": "", "new_label": "", "commit": h, "reverted": False,
+                         "feedback": ["(피드백 없이 직접 수정)"], "changes": [{"target": "내 판단 기준", "reason": "판단 순서 · 기준을 직접 고침"}], "approver": "컨설턴트"})
+    rows.sort(key=lambda r: r["at"])
+    for i, r in enumerate(x for x in rows if not x["reverted"]):
+        r["version"] = i + 2
+    return rows
+
+
+TARGET_NAME = {"playbook/": "공통 작업 규칙", "my/lens.md": "내 판단 기준", "project/people/": "받는 사람 설정", "project/rubric.md": "평가 루브릭"}
+
+
+def lens_order() -> list[str]:
+    f = ROOT / "my/lens.md"
+    if not f.exists():
+        return []
+    m = re.search(r"## 판단 기준 순서[^\n]*\n(?:(?!\s*\d+\.)[^\n]*\n)*?((?:[ \t]*\d+\.[^\n]*\n?)+)", f.read_text(encoding="utf-8"))
+    return [re.sub(r"^\s*\d+\.\s*", "", x).strip() for x in (m.group(1).splitlines() if m else []) if x.strip()]
+
+
+def criteria_view() -> dict:
+    hist = applied_history()
+    return {"version": 1 + sum(not r["reverted"] for r in hist), "order": lens_order(), "lens": (ROOT / "my/lens.md").read_text(encoding="utf-8") if (ROOT / "my/lens.md").exists() else "",
+            "history": hist}
 
 
 class H(BaseHTTPRequestHandler):
@@ -620,7 +805,13 @@ class H(BaseHTTPRequestHandler):
                 self.send(UI.read_text(encoding="utf-8").replace("/*TOKENS*/", TOKENS))
             elif u.path == "/api/home":
                 c = active_case()
-                self.js({"active": c, "cases": list_cases(), "case": case_view(), "runs": case_runs(c["id"]), "job": JOBS.get("_home")})
+                self.js({"active": c, "cases": list_cases(), "case": case_view(), "runs": case_runs(c["id"]), "job": JOBS.get("_home"),
+                         "criteria": {k: v for k, v in criteria_view().items() if k != "lens"}, "goldens": [m for m in list_goldens() if m["scope"].get("case") == c["id"]],
+                         "activity": activity(c["id"])})
+            elif u.path == "/api/criteria":
+                self.js(criteria_view())
+            elif u.path == "/api/goldens":
+                self.js({"goldens": list_goldens()})
             elif u.path == "/api/runs":
                 out = []
                 if RUNS.is_dir():
@@ -630,7 +821,7 @@ class H(BaseHTTPRequestHandler):
                         if (m.get("case") or DEFAULT_CASE["id"]) != cid:
                             continue
                         fb = read_feedback(d)
-                        out.append({"run": d.name, "person": m.get("person"), "parent": m.get("parent"), "files": doc_files(d), "feedback": len(fb),
+                        out.append({"run": d.name, "label": run_label(d.name), "status": run_status(d.name), "person": m.get("person"), "parent": m.get("parent"), "files": doc_files(d), "feedback": len(fb),
                                     "verdict": read_json(d / "verdict.json", None), "golden": (GOLDEN / d.name).exists()})
                 self.js({"runs": out})
             elif u.path == "/api/run":
@@ -638,7 +829,9 @@ class H(BaseHTTPRequestHandler):
                 ch = d / "changes.diff"
                 self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d), "suggestions": read_suggestions(d),
                          "ui": read_json(d / "ui.json", {}), "grades": read_json(d / "grades.json", {}), "selection": selection_rows(d), "proposal": load_proposal(d), "applied": read_json(d / "applied.json", None), "changes": ch.read_text(encoding="utf-8") if ch.exists() else "", "job": JOBS.get(q["run"]),
-                         "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"])})
+                         "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"]), "label": run_label(q["run"]), "status": run_status(q["run"]),
+                         "person_label": person_label(read_json(d / "run.json", {}).get("person")), "case": active_case(), "criteria": {"version": criteria_view()["version"], "order": lens_order()},
+                         "parent_feedback": parent_feedback(d), "lineage_labels": [run_label(r) for r in lineage(q["run"])]})
             elif u.path == "/api/evidence":
                 self.js(load_register().get(q["id"]) or {"error": "근거 묶음에 없는 번호입니다"})
             elif u.path == "/board":
@@ -662,7 +855,7 @@ class H(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             if self.path == "/api/feedback":
                 d = run_dir(data["run"])
-                item = {k: data.get(k) for k in ("file", "quote", "comment", "kind", "reviewer", "occurrence")}
+                item = {k: data.get(k) for k in ("file", "quote", "comment", "kind", "reviewer", "occurrence", "category")}
                 if not (item["comment"] or "").strip() and item["kind"] != "good":
                     raise ValueError("무엇이 문제인지 한 줄 적어 주세요")
                 item.update(id=uuid.uuid4().hex[:8], at=dt.datetime.now().isoformat(timespec="seconds"))
@@ -795,7 +988,24 @@ class H(BaseHTTPRequestHandler):
                 save_active()
                 self.js({"ok": True})
             elif self.path == "/api/golden":
-                self.js(freeze_golden(data["run"], data.get("name")))
+                self.js(freeze_golden(data["run"], None, str(data.get("reason", "")), str(data.get("reviewer", ""))))
+            elif self.path == "/api/golden/status":
+                self.js(set_golden_status(str(data.get("id", "")), str(data.get("status", ""))))
+            elif self.path == "/api/lens/save":
+                text = str(data.get("text", ""))
+                if "## 판단 기준 순서" not in text:
+                    raise ValueError("«## 판단 기준 순서» 제목은 남겨 주세요")
+                (ROOT / "my/lens.md").write_text(text.rstrip() + "\n", encoding="utf-8")
+                commit_paths("내 판단 기준 직접 수정", ["my/lens.md"])
+                self.js(criteria_view())
+            elif self.path == "/api/resolve":
+                d = run_dir(data["run"])
+                ui = read_json(d / "ui.json", {}) or {}
+                if data.get("state") not in ("fixed", "open", "worse"):
+                    raise ValueError("해결됨 · 아직 · 나빠짐 중 하나입니다")
+                ui.setdefault("resolved", {})[str(data["id"])] = data["state"]
+                (d / "ui.json").write_text(json.dumps(ui, ensure_ascii=False), encoding="utf-8")
+                self.js(ui)
             else:
                 self.js({"error": "없음"}, 404)
         except (ValueError, FileNotFoundError, KeyError, json.JSONDecodeError) as e:

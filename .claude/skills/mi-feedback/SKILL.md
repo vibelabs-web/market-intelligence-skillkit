@@ -10,7 +10,7 @@ disable-model-invocation: true
 **너는 스킬을 고치지 않는다.** 수정안만 쓴다. 사람이 승인한 문구만 프로그램이 그대로 바꾼다. 결과물도 손으로 고치지 않는다.
 
 ## 입력
-`runs/<실행>/feedback.jsonl` · `suggestions.jsonl` · `brief.md` · `decision.md` · `selection.csv` · `run.json` · `playbook/mi-brief.md` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/fact-pack/` · `project/rubric.md` · `my/lens.md`. 피드백이 없으면 멈춘다. 평가관이 반대(`state: rejected`)한 지적은 반영하지 않고 그 이유(`note`)를 존중한다.
+`runs/<실행>/feedback.jsonl` · `suggestions.jsonl` · `brief.md` · `decision.md` · `selection.csv` · `run.json` · `playbook/mi-brief.md` · 해당 `project/people/<id>.md` · `project/brief.md` · `project/fact-pack/` · `project/rubric.md` · `my/lens.md`. 피드백이 없으면 멈춘다. 피드백의 `category`(사실 · 해석 · 개인화 · 형식)를 원인 판단의 단서로 쓴다. 평가관이 반대(`state: rejected`)한 지적은 반영하지 않고 그 이유(`note`)를 존중한다.
 
 ## 절차
 1. **지적을 자료와 대조한다.** 지적이 자료와 어긋나면 그대로 받아들이지 말고 `warnings` 에 쓴다. 예: «12월 1일은 근거가 없다»는 지적인데 프로필에 그 날짜가 있으면 «프로필에 있습니다. 그래도 뺄까요?». 평가관의 말을 바꾸어 적지 않는다.
@@ -22,6 +22,7 @@ disable-model-invocation: true
    | 누구에게나 통할 작업 방식 | `playbook/mi-brief.md` 수정안 |
    | 평가 기준 자체 | `project/rubric.md` 수정안 |
    | 필요한 값 · 근거가 없음(금액 · 물량 · 재고 등) | 수정안을 만들지 말고 `needs_data` 에 쓴다. 빈칸 많은 표를 만드는 규칙을 넣지 않는다 |
+**한 사례의 결론 선호를 공통 규칙으로 만들지 않는다.** «나는 태국을 우선한다» 같은 지적은 `playbook/mi-brief.md` 에 «태국을 추천하라»로 넣지 않는다. 판단 순서나 그 이유라면 `my/lens.md` 수정안, 이 사례의 사실이라면 `warnings` 로 돌린다.
 3. **수정안을 쓴다.** 다른 사례에도 통하는 규칙으로 쓰고, 이번 답을 그대로 적지 않는다. **새 규칙을 덧붙이기 전에 기존 규칙을 고쳐 해결할 수 있는지 먼저 본다.** 겹치면 합치는 수정안을 낸다. 플레이북은 한 회차에 글자 수 순증 500자 이내로 하고, 넘으면 가장 중요한 지적만 규칙으로 올리고 나머지는 이번 사람의 프로필이나 경고로 돌린다. 지적이 이 판의 한 문장에만 해당하면 규칙을 만들지 않고 `warnings` 에 쓴다. **요청받지 않은 규칙을 지우지 않는다.** 지우려면 `kind: delete` 로 따로 내고 왜 지우는지 쓴다. 절차의 판단 규칙이 10개를 넘으면 합칠 후보를 제안하되 지우는 결정은 사람에게 맡긴다.
 
 ## 출력 — `runs/<실행>/proposal.json` 하나만 쓴다
