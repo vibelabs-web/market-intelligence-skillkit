@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check_brief.py — 보고서를 코드로 검사한다 (G1 출처 · G2 상태 · G3 숫자 · G4 계산 · G5 가상 표시)
+"""check_brief.py — 보고서를 코드로 검사한다 (G1 출처 · G2 상태 · G3 숫자 · G4 계산 · G5 가상 표시 · G6 분량)
 
   python3 tools/check_brief.py runs/r1/brief.md [--register project/fact-pack/evidence-register.csv] [--profile project/people/ceo.md]
 
@@ -122,6 +122,20 @@ def check(text: str, rows: dict[str, dict], synthetic_values: set[str] = frozens
     return issues
 
 
+def length_issue(text: str, profile: str) -> dict | None:
+    """프로필의 «형식» 줄에 분량이나 읽는 시간이 있으면 재서 20% 넘게 길 때 알린다 (1분 ≈ 350자, 공백 포함, 근거 번호 · 마크다운 표시 제외)"""
+    line = next((l for l in profile.splitlines() if "형식" in l), "")
+    chars = re.search(r"(\d[\d,]*)\s*자", line)
+    mins = re.search(r"(\d+)\s*분", line)
+    if not chars and not mins:
+        return None
+    limit = int(chars.group(1).replace(",", "")) if chars else int(mins.group(1)) * 350
+    n = len(re.sub(r"\s+", " ", re.sub(r"[#*|`>\[\]]", "", ID.sub("", text))).strip())
+    if n <= limit * 1.2:
+        return None
+    return {"gate": "G6", "sentence": f"{n}자", "why": f"프로필 기준 {limit}자보다 많이 깁니다 ({n}자)"}
+
+
 def load_rows(register: str = "project/fact-pack/evidence-register.csv") -> dict[str, dict]:
     """시장 근거 + 같은 폴더의 내부 자료 대장"""
     rows: dict[str, dict] = {}
@@ -150,6 +164,10 @@ def main() -> int:
         return 2
     allowed = {norm(n) for n in NUM.findall(Path(a.profile).read_text(encoding="utf-8"))} if a.profile else frozenset()
     issues = check(text, rows, {norm(x) for x in a.synthetic.split(",") if x}, allowed)
+    if a.profile:
+        too_long = length_issue(text, Path(a.profile).read_text(encoding="utf-8"))
+        if too_long:
+            issues.append(too_long)
     sel = Path(a.brief).with_name("selection.csv")
     if sel.exists():
         with open(sel, encoding="utf-8", newline="") as f:

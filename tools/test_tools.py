@@ -80,6 +80,21 @@ class BriefHardening(unittest.TestCase):
         self.assertEqual(gates("후보 2개를 고른다."), [])
 
 
+class Length(unittest.TestCase):
+    def li(self, text, profile):
+        from check_brief import length_issue
+        return length_issue(text, profile)
+    def test_minutes(self):
+        self.assertIsNotNone(self.li("가" * 500, "- **형식:** 1분 안에 읽는다."))
+        self.assertIsNone(self.li("가" * 400, "- **형식:** 1분 안에 읽는다."))
+    def test_chars_first(self):
+        self.assertIsNotNone(self.li("가" * 1300, "- **형식:** 3분. 분량은 한글 1,000자 안팎."))
+    def test_citation_not_counted(self):
+        self.assertIsNone(self.li("가" * 400 + "[E-001]" * 30, "- **형식:** 1분."))
+    def test_no_limit(self):
+        self.assertIsNone(self.li("가" * 9000, "- **형식:** 수치와 기한. 표 환영."))
+
+
 class Agreement(unittest.TestCase):
     G = {"a": {"expected": "PASS", "criterion": "G1"}, "b": {"expected": "FAIL", "criterion": "G2"}}
     def test_full(self):

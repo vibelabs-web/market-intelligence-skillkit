@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse, csv, hashlib, json, re, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
-from check_brief import NUM, check, load_rows, norm
+from check_brief import NUM, check, length_issue, load_rows, norm
 
 ROOT = Path(__file__).resolve().parent.parent
 KEY = ROOT / "_instructor/grading/signal-key.json"
@@ -85,7 +85,7 @@ def normalize(got: dict, text: str, key: dict) -> tuple[dict, str, dict]:
     return out, text2, cnt
 
 
-def judge(gold_dir: Path, cand: Path, rows: dict, key: dict | None = None, allowed: set = frozenset()) -> dict:
+def judge(gold_dir: Path, cand: Path, rows: dict, key: dict | None = None, allowed: set = frozenset(), profile: str = "") -> dict:
     grades = json.loads((gold_dir / "grades.json").read_text(encoding="utf-8"))
     text = (cand / "brief.md").read_text(encoding="utf-8")
     got = selection(cand / "selection.csv")
@@ -96,6 +96,9 @@ def judge(gold_dir: Path, cand: Path, rows: dict, key: dict | None = None, allow
     cited = set(EID.findall(text))
     sel = score_grades(grades, got, cited)
     facts = check(text, rows, allowed=allowed)
+    too_long = length_issue(text, profile)
+    if too_long:
+        facts.append(too_long)
     items = []
     ap = gold_dir / "assertions.jsonl"
     if ap.exists():
@@ -156,14 +159,15 @@ def main() -> int:
         grades = json.loads((g / "grades.json").read_text(encoding="utf-8"))
         person = json.loads((g / "golden.json").read_text(encoding="utf-8")).get("person") if (g / "golden.json").exists() else None
         prof = g / "profile.md" if (g / "profile.md").exists() else ROOT / f"project/people/{person}.md"
-        allowed = {norm(n) for n in NUM.findall(prof.read_text(encoding="utf-8"))} if prof.exists() else set()
+        profile = prof.read_text(encoding="utf-8") if prof.exists() else ""
+        allowed = {norm(n) for n in NUM.findall(profile)}
         signal_run = a.level == "L2" or any(SID.fullmatch(i) for i in selection(paths[0] / "selection.csv"))
         key = None
         if signal_run:
             if not Path(a.key).exists():
                 raise OSError("대량 신호 결과는 강사 채점으로 잽니다 (정답 파일 없음)")
             key = json.loads(Path(a.key).read_text(encoding="utf-8"))
-        res = [judge(g, p, rows, key, allowed) for p in paths]
+        res = [judge(g, p, rows, key, allowed, profile) for p in paths]
         distinct = len({fingerprint(p) for p in paths})
     except (OSError, KeyError, json.JSONDecodeError) as e:
         print(f"입력 오류: {e}", file=sys.stderr)
