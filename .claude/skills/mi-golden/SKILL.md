@@ -1,24 +1,22 @@
 ---
 name: mi-golden
-description: 평가관의 판정 기록을 기술 평가용 골든 데이터로 바꾼다. 사람 채점이 쌓인 뒤 자동 평가를 만들 때 쓴다.
-argument-hint: "[출력 이름]"
+description: 평가관이 저장한 골든을 개발자가 재현 시험할 수 있는 판정 항목으로 바꾼다. 검토 화면에서 골든을 저장한 뒤 쓴다.
+argument-hint: "[골든 이름]"
 ---
 
-# 판정을 골든으로
+# 골든을 시험 항목으로
 
 ## 입력
-`reviews/labels.csv` · `runs/` 의 보고서. 판정이 없으면 만들지 않는다.
+`golden/<이름>/` 의 `golden.json` · `selection.csv` · `brief.md` · `feedback-history.jsonl`. 없으면 멈춘다.
 
 ## 절차
-1. 항목별로 묶어 평가자가 갈린 곳을 찾는다.
-2. 일치한 판정은 골든 후보로, 갈린 판정은 `논쟁` 으로 분리해 평가자에게 돌려보낸다. 다수결로 덮지 않는다.
-3. 각 사례를 분류한다 — **규칙**(숫자 · ID · 표시처럼 코드로 판정) / **LLM**(읽고 판단) / **사람**(자동화하지 않음).
+피드백과 결과에서 **재현을 판단할 항목**을 뽑아 분류한다.
+- `contains` · `not_contains` — 반드시 있어야 / 없어야 하는 표현이나 값. 표현이 달라도 되면 쓰지 않는다.
+- `llm` — 읽고 판단해야 하는 것(예: 결론의 방향, 권한 안의 행동).
+- 평가관이 말하지 않은 기준을 만들지 않는다. 각 항목에 근거 피드백 id 또는 판정 이유를 적는다.
 
 ## 출력
-`golden/<이름>.jsonl` — 줄마다 `case_id,run_id,persona,criterion,expected,quote,reason,kind`. `golden/<이름>-disputes.md`.
-
-## 완료 조건
-모든 사례가 실제 판정 기록의 문장을 가리킨다. 사람이 하지 않은 판정을 만들지 않았다.
+`golden/<이름>/assertions.jsonl` — 줄마다 `{"id","kind","value","source"}`.
 
 ## 권한
-판정을 고치지 않는다. 쓰기는 `golden/` 만.
+골든의 다른 파일을 고치지 않는다.

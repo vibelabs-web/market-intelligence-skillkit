@@ -56,5 +56,22 @@ class Agreement(unittest.TestCase):
         self.assertIsNone(measure({}, [])["agreement"])
 
 
+class Golden(unittest.TestCase):
+    def test_selection(self):
+        from golden_compare import score_selection
+        g={"E-1":"yes","E-2":"no"}
+        self.assertTrue(score_selection(g,dict(g))["match"])
+        r=score_selection(g,{"E-1":"no","E-2":"yes"})
+        self.assertFalse(r["match"]); self.assertEqual(r["precision"],0.0); self.assertEqual(r["recall"],0.0)
+        self.assertFalse(score_selection(g,{"E-1":"yes"})["match"])
+        self.assertFalse(score_selection(g,{**g,"E-3":"yes"})["match"])
+    def test_assertions(self):
+        from golden_compare import score_assertions
+        A=[{"id":"a","kind":"contains","value":"구리"},{"id":"b","kind":"not_contains","value":"확정"},{"id":"c","kind":"llm","value":"방향"}]
+        ok,r=score_assertions(A,"구리 가격",{"c":"PASS"}); self.assertTrue(ok)
+        ok,r=score_assertions(A,"구리 가격",{}); self.assertFalse(ok); self.assertEqual(r[2]["result"],"NOT_JUDGED")
+        ok,_=score_assertions(A,"확정된 구리",{"c":"PASS"}); self.assertFalse(ok)
+
+
 if __name__ == "__main__":
     unittest.main()
