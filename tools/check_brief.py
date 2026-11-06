@@ -9,10 +9,11 @@ from __future__ import annotations
 import argparse, csv, json, re, sys
 from pathlib import Path
 
-ID = re.compile(r"E-\d{3}")
+ID = re.compile(r"[EI]-\d{3}")
 NUM = re.compile(r"(?<![\w.-])\d[\d,]*(?:\.\d+)?")
 FIRM = re.compile(r"시행\s*중|확정|발효|의무화(?:됐|되었)|in force|mandatory", re.I)
 HEDGE = re.compile(r"초안|검토|추진|예정|미확정|불확실|proposed|draft|가능성|확인\s*필요")
+CALC = re.compile(r"[=×÷≈]")   # 식을 보인 계산값은 근거와 글자 대조를 하지 않는다
 SYN = re.compile(r"\(?\s*(?:synthetic|내부\s*집계|내부\s*자료)\s*\)?", re.I)
 
 
@@ -66,13 +67,26 @@ def check(text: str, rows: dict[str, dict], synthetic_values: set[str] = frozens
         if known:
             hay = " ".join(f"{r.get('quote','')} {r.get('claim','')}" for r in known).replace(",", "")
             for n in nums:
-                if n not in hay and not is_syn:
+                if n not in hay and not is_syn and not CALC.search(s):
                     add("G3", s, f"숫자 {n} 이 인용한 근거에 없음")
             if any(r.get("status") in ("proposed", "uncertain") for r in known) and FIRM.search(s) and not HEDGE.search(s):
                 add("G2", s, "검토 · 불확실 근거를 확정처럼 씀")
         if not is_syn and any(v in nums for v in synthetic_values):
             add("G5", s, "가상 내부 수치에 synthetic 표시가 없음")
     return issues
+
+
+def load_rows(register: str = "project/fact-pack/evidence-register.csv") -> dict[str, dict]:
+    """시장 근거 + 같은 폴더의 내부 자료 대장"""
+    rows: dict[str, dict] = {}
+    p = Path(register)
+    for f in (p, p.with_name("internal-data.csv")):
+        if f.exists():
+            with open(f, encoding="utf-8", newline="") as fp:
+                rows.update({r["evidence_id"]: r for r in csv.DictReader(fp)})
+    if not rows:
+        raise OSError(f"근거 묶음이 없습니다: {register}")
+    return rows
 
 
 def main() -> int:
@@ -83,8 +97,7 @@ def main() -> int:
     a = ap.parse_args()
     try:
         text = Path(a.brief).read_text(encoding="utf-8")
-        with open(a.register, encoding="utf-8", newline="") as f:
-            rows = {r["evidence_id"]: r for r in csv.DictReader(f)}
+        rows = load_rows(a.register)
     except OSError as e:
         print(f"입력 오류: {e}", file=sys.stderr)
         return 2

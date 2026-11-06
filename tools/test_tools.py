@@ -31,6 +31,11 @@ class Brief(unittest.TestCase):
         self.assertEqual(gates("베트남 문의는 42건입니다 (synthetic).", {"42"}), [])
     def test_internal_label(self):
         self.assertEqual(gates("베트남 문의는 42건입니다(내부 집계).", {"42"}), [])
+    def test_calc_shown_not_checked(self):
+        self.assertEqual(gates("차이는 (1,234 − 234) = 1,000 입니다 [E-001]."), [])
+    def test_internal_id_known(self):
+        rows = dict(ROWS, **{"I-001": {"quote": "문의 42건", "claim": "", "status": "internal"}})
+        self.assertEqual(check("문의는 42건입니다 [I-001].", rows), [])
     def test_synthetic_unmarked(self):
         self.assertIn("G5", gates("베트남 문의는 42건입니다 [E-001].", {"42"}))
     def test_citation_after_period(self):

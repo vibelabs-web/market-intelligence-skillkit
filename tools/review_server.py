@@ -8,7 +8,7 @@
   golden/<run>/          만족한 결과의 동결본 (결과물 · 피드백 이력 · 스킬 버전)
 """
 from __future__ import annotations
-import argparse, csv, datetime as dt, difflib, hashlib, html, io, json, re, shutil, subprocess, urllib.parse, uuid
+import argparse, csv, datetime as dt, difflib, hashlib, html, io, json, os, re, shutil, subprocess, threading, urllib.parse, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -24,11 +24,13 @@ mark.fb{background:#ffe58a;cursor:pointer}mark.fb.good{background:#bdeec8}mark.f
 
 
 def load_register() -> dict[str, dict]:
-    p = ROOT / "project/fact-pack/evidence-register.csv"
-    if not p.exists():
-        return {}
-    with open(p, encoding="utf-8", newline="") as f:
-        return {r["evidence_id"]: r for r in csv.DictReader(f)}
+    out: dict[str, dict] = {}
+    for n in ("evidence-register.csv", "internal-data.csv"):
+        p = ROOT / "project/fact-pack" / n
+        if p.exists():
+            with open(p, encoding="utf-8", newline="") as f:
+                out.update({r["evidence_id"]: r for r in csv.DictReader(f)})
+    return out
 
 
 def inline(s: str, reg: dict) -> str:
@@ -40,9 +42,8 @@ def inline(s: str, reg: dict) -> str:
         r = reg.get(m.group(0))
         if not r:
             return f'<a class="ev" style="background:#fde3e3;color:#b00" title="근거 묶음에 없는 ID">{m.group(0)}</a>'
-        tip = html.escape(f"{r.get('publisher','')} · {r.get('status','')} · {r.get('quote','')}", quote=True)
-        return f'<a class="ev" href="{html.escape(r.get("source_url",""), quote=True)}" target="_blank" rel="noopener" title="{tip}">{m.group(0)}</a>'
-    return re.sub(r"\bE-\d{3}\b", ev, s)
+        return f'<a class="ev" role="button" style="cursor:pointer">{m.group(0)}</a>'
+    return re.sub(r"\b[EI]-\d{3}\b", ev, s)
 
 
 def md_to_html(text: str, reg: dict) -> str:
@@ -95,6 +96,8 @@ def csv_to_html(text: str, reg: dict) -> str:
     extra = ["내용", "출처 · 시점 · 상태"] if eid >= 0 and reg else []
     h = "<table><tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in head + extra) + "</tr>"
     for r in body:
+        if len(r) > len(head):                       # 쉼표를 따옴표로 감싸지 않은 칸은 마지막 칸에 합친다
+            r = r[:len(head) - 1] + [",".join(r[len(head) - 1:])]
         cl = f' class="sel-{"yes" if r[idx].strip().lower() == "yes" else "no"}"' if 0 <= idx < len(r) else ""
         cells = "".join(f"<td>{inline(c, reg)}</td>" for c in r)
         if extra:
@@ -126,7 +129,7 @@ def run_dir(run: str) -> Path:
 
 
 def doc_files(d: Path) -> list[str]:
-    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl"}
+    hide = {"feedback.jsonl", "verdict.json", "run.json", "suggestions.jsonl", "ui.json", "changes.diff"}
     fs = [p.name for p in sorted(d.iterdir()) if p.is_file() and p.name not in hide and not p.name.startswith(".")]
     return sorted(fs, key=lambda n: (not n.startswith("brief"), n))
 
@@ -149,7 +152,14 @@ def read_suggestions(d: Path) -> list[dict]:
     p = d / "suggestions.jsonl"
     if not p.exists():
         return []
-    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    out = []
+    for i, x in enumerate(p.read_text(encoding="utf-8").splitlines()):
+        if x.strip():
+            s = json.loads(x)
+            s["id"] = str(s.get("id", f"s{i + 1}"))          # 생성 모델이 숫자로 적어도 처리한다
+            s["file"] = Path(str(s.get("file") or "brief.md")).name
+            out.append(s)
+    return out
 
 
 def write_suggestions(d: Path, items: list[dict]) -> None:
@@ -158,6 +168,37 @@ def write_suggestions(d: Path, items: list[dict]) -> None:
 
 def write_feedback(d: Path, items: list[dict]) -> None:
     (d / "feedback.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in items), encoding="utf-8")
+
+
+JOBS: dict[str, dict] = {}
+JOB_LOCK = threading.Lock()
+TOOLS = ("Read,Edit(playbook/**),Write(playbook/**),Edit(project/people/**),Write(project/people/**),Edit(project/rubric.md),Edit(my/**),Edit(shave-log.md),Write(shave-log.md),"
+         "Write(runs/**),Edit(runs/**),Bash(python3 tools/*),Bash(git status*),Bash(git add*),Bash(git commit*),Bash(git rev-parse*),Bash(git log*),Bash(git diff*),Bash(mkdir*)")
+
+
+def claude_run(prompt: str) -> str:
+    cmd = ["claude", "-p", prompt, "--model", os.environ.get("MI_MODEL", "claude-sonnet-5-5"), "--permission-mode", "acceptEdits", "--allowedTools", TOOLS, "--output-format", "text"]
+    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600).stdout
+
+
+def apply_job(run: str) -> None:
+    job = JOBS[run]
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        before = {p.name for p in RUNS.iterdir() if p.is_dir()}
+        job["step"] = "피드백을 스킬에 반영하고 새 판을 만드는 중"
+        out = claude_run(f"/mi-feedback {run} 바로")
+        new = sorted(p.name for p in RUNS.iterdir() if p.is_dir() and p.name not in before and (p / "brief.md").exists())
+        if not new:
+            job.update(state="failed", error="새 판을 만들지 못했습니다. " + out[-300:])
+            return
+        job["step"] = "판정 에이전트가 새 판을 읽는 중"
+        claude_run(f"/mi-review {new[-1]}")
+        diff = subprocess.run(["git", "diff", head, "--", "playbook", "project/people", "project/rubric.md", "my"], cwd=ROOT, capture_output=True, text=True).stdout
+        (RUNS / new[-1] / "changes.diff").write_text(diff, encoding="utf-8")
+        job.update(state="done", new_run=new[-1], summary=out[-1800:])
+    except Exception as e:                           # 어떤 실패든 화면에 알린다
+        job.update(state="failed", error=str(e)[:300])
 
 
 def lineage(run: str) -> list[str]:
@@ -196,6 +237,10 @@ def freeze_golden(run: str, name: str | None) -> dict:
     for r in reversed(lineage(run)):
         history += [dict(x, run=r) for x in read_feedback(RUNS / r)]
     (g / "feedback-history.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in history), encoding="utf-8")
+    labels = []
+    for r in reversed(lineage(run)):
+        labels += [dict(x, run=r) for x in read_suggestions(RUNS / r) if x.get("state")]
+    (g / "judge-labels.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in labels), encoding="utf-8")
     meta = read_json(d / "run.json", {})
     def sha(rel):
         p = ROOT / rel if rel else None
@@ -246,7 +291,9 @@ class H(BaseHTTPRequestHandler):
                 self.js({"runs": out})
             elif u.path == "/api/run":
                 d = run_dir(q["run"])
+                ch = d / "changes.diff"
                 self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d), "suggestions": read_suggestions(d),
+                         "ui": read_json(d / "ui.json", {}), "changes": ch.read_text(encoding="utf-8") if ch.exists() else "", "job": JOBS.get(q["run"]),
                          "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"])})
             elif u.path == "/api/evidence":
                 self.js(load_register().get(q["id"]) or {"error": "근거 묶음에 없는 번호입니다"})
@@ -282,7 +329,11 @@ class H(BaseHTTPRequestHandler):
             elif self.path == "/api/suggestion":
                 d = run_dir(data["run"])
                 items = read_suggestions(d)
-                s = next(x for x in items if x["id"] == data["id"])
+                s = next((x for x in items if x["id"] == str(data["id"])), None)
+                if s is None:
+                    raise ValueError("없는 의견입니다")
+                if not data.get("accept") and not str(data.get("note", "")).strip():
+                    raise ValueError("반대하는 이유를 한 줄 적어 주세요")
                 s.update(state="accepted" if data.get("accept") else "rejected", reviewer=data.get("reviewer", ""), note=data.get("note", ""))
                 write_suggestions(d, items)
                 if data.get("accept"):
@@ -291,6 +342,22 @@ class H(BaseHTTPRequestHandler):
                             "at": dt.datetime.now().isoformat(timespec="seconds")}
                     write_feedback(d, read_feedback(d) + [item])
                 self.js(s)
+            elif self.path == "/api/reveal":
+                d = run_dir(data["run"])
+                ui = {"revealed": True, "own_feedback": len(read_feedback(d)), "at": dt.datetime.now().isoformat(timespec="seconds")}
+                (d / "ui.json").write_text(json.dumps(ui, ensure_ascii=False), encoding="utf-8")
+                self.js(ui)
+            elif self.path == "/api/apply":
+                run = safe(data["run"])
+                d = run_dir(run)
+                if not read_feedback(d):
+                    raise ValueError("반영할 피드백이 없습니다. 지적을 남기거나 의견에 동의해 주세요")
+                with JOB_LOCK:
+                    if any(j["state"] == "running" for j in JOBS.values()):
+                        raise ValueError("다른 반영이 진행 중입니다")
+                    JOBS[run] = {"state": "running", "step": "시작", "at": dt.datetime.now().isoformat(timespec="seconds")}
+                threading.Thread(target=apply_job, args=(run,), daemon=True).start()
+                self.js(JOBS[run])
             elif self.path == "/api/verdict":
                 d = run_dir(data["run"])
                 v = {"ok": bool(data.get("ok")), "reason": data.get("reason", ""), "reviewer": data.get("reviewer", ""), "at": dt.datetime.now().isoformat(timespec="seconds")}
@@ -302,6 +369,8 @@ class H(BaseHTTPRequestHandler):
                 self.js({"error": "없음"}, 404)
         except (ValueError, FileNotFoundError, KeyError, json.JSONDecodeError) as e:
             self.js({"error": str(e)}, 400)
+        except Exception as e:                       # 저장 실패가 «Failed to fetch» 로 끊기지 않게 한다
+            self.js({"error": f"저장하지 못했습니다: {e}"}, 500)
 
 
 def main():

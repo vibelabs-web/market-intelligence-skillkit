@@ -8,7 +8,7 @@ context: fork
 # 독립 평가
 
 ## 입력
-`runs/<실행>/brief.md` · `selection.csv` · `run.json` · 해당 `project/people/<id>.md` · `project/rubric.md` · `project/fact-pack/evidence-register.csv`.
+`runs/<실행>/brief.md` · `selection.csv` · `run.json` · 해당 `project/people/<id>.md` · `project/rubric.md` · `project/fact-pack/evidence-register.csv` · `project/fact-pack/internal-data.csv`.
 
 ## 절차
 1. 근거 ID 를 실제 행과 대조한다. 대조하지 않은 것을 맞다고 쓰지 않는다.
@@ -18,7 +18,7 @@ context: fork
 ## 출력
 `runs/<실행>/review.md`
 
-또한 평가관이 먼저 볼 제안을 `runs/<실행>/suggestions.jsonl` 에 줄마다 `{"id","file","quote","comment","kind","who"}` 로 쓴다. quote 는 결과물의 문장을 글자 그대로 옮긴다. kind 는 fix · remove · missing. who 는 그 지적을 하는 관점(받는 사람 · 깐깐한 파트너 · 사실 검사). 5건 이내, 가장 심각한 순서로. 칭찬은 쓰지 않는다.
+또한 평가관이 먼저 볼 제안을 `runs/<실행>/suggestions.jsonl` 에 줄마다 `{"id","file","quote","comment","kind","who"}` 로 쓴다. id 는 `s1` 같은 문자열, file 은 `brief.md` 처럼 파일 이름만 쓴다. quote 는 결과물의 문장을 글자 그대로 옮긴다. kind 는 fix · remove · missing. who 는 그 지적을 하는 관점(받는 사람 · 깐깐한 파트너 · 사실 검사). 5건 이내, 가장 심각한 순서로. 칭찬은 쓰지 않는다.
 
 ## 권한
 결과물을 고치지 않는다. 이 평가는 보조 자료이고 판정은 사람이 한다.

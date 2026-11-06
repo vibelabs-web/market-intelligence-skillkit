@@ -15,7 +15,7 @@ from __future__ import annotations
 import csv, json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
-from check_brief import check
+from check_brief import check, load_rows
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -78,8 +78,7 @@ def main() -> int:
         return 2
     g = Path(sys.argv[1])
     try:
-        with open(ROOT / "project/fact-pack/evidence-register.csv", encoding="utf-8", newline="") as f:
-            rows = {r["evidence_id"]: r for r in csv.DictReader(f)}
+        rows = load_rows(str(ROOT / "project/fact-pack/evidence-register.csv"))
         res = [judge(g, Path(c), rows, {"42", "27", "18", "11"}) for c in sys.argv[2:]]
         sels = [selection(Path(c) / "selection.csv") for c in sys.argv[2:]]
     except (OSError, KeyError, json.JSONDecodeError) as e:
