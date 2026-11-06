@@ -1,3 +1,0 @@
-{"file": "brief.md", "quote": "2026-11-30 안건은", "comment": "[자체시험] 휴대폰으로 3분이면 이 길이는 못 읽는다. 결론 뒤에 이사회에 올릴 안건 문구를 한 줄로 써라. 전체를 절반으로.", "kind": "fix", "reviewer": "자체시험", "occurrence": null, "id": "19fd8f48", "at": "2026-11-06T18:29:48"}
-{"file": "selection.csv", "quote": "E-023", "comment": "[자체시험] 희토류 공급이 끊기면 진출 자체가 흔들린다. CEO가 몰라도 된다는 판단은 틀렸다. 전사 위험은 부서 정보여도 CEO에게 한 줄로 올려라.", "kind": "missing", "reviewer": "자체시험", "occurrence": null, "id": "665a4049", "at": "2026-11-06T18:29:48"}
-{"file": "brief.md", "quote": "2023년 HS 8501 수입액은", "comment": "[자체시험] 과대하다고 스스로 말한 숫자를 왜 CEO에게 주나. 결정을 못 가르는 숫자는 빼라.", "kind": "remove", "reviewer": "자체시험", "occurrence": null, "id": "baa63b5e", "at": "2026-11-06T18:29:48"}
