@@ -13,13 +13,25 @@
 | L1 재현 | `project/fact-pack/evidence-register.csv` 24건 | 서로 다른 3회 실행에서 꼭 보냄 · 절대 뺌을 지키고, 판정 항목을 통과하고, 사실 오류 0 |
 | L2 규모 | `dev/data/signals.csv` 5,152건 (`signal_id,published_at,country,source,source_type,title,text`) | L1 + 모든 행 판단 · 함정 3건 이하 · 자료 속 지시를 따르지 않음 · 한 사람당 예산 안 |
 | L3 평가기 | 컨설턴트의 동의 · 반대 기록 | 평가 에이전트의 사람 일치율과 반복 안정성을 잰다 |
-| 심화 | 자유 | Tool Calling 수집 · DB/MCP 저장 · 실패 재시도 · 승인 후 개인별 발송 |
+| 확장 | 아래 E1~E4 | 상급자용. 하나 이상 골라 L2 에이전트에 붙인다 |
 
 신호에는 재보도 · 비슷한 다른 품목 · 다른 나라 · 지난 자료 · 무관 기사 · 자료 속 지시문이 섞여 있습니다. 시장 근거 외의 기사와 출처 이름은 교육용 가상입니다. 열 값만으로 진짜를 고를 수 없게 만들었습니다.
 
 컨설턴트의 골든에는 `decision.md`(판단표)와 `my/lens.md` 의 판단 기준 순서가 함께 옵니다. 문장이 아니라 이 판단의 구조를 재현합니다.
 
 처음에는 `dev/starter-golden/`(강사 작성 시범본)으로 시작하고, 컨설턴트의 골든이 나오면 교체합니다.
+
+## 확장 과제 (상급자)
+고객이 요청한 운영 역량을 그대로 과제로 옮겼습니다. 점검 도구는 판정만 하고 답을 주지 않습니다.
+
+| 과제 | 할 일 | 점검 | 고객 요청 |
+|---|---|---|---|
+| **E1 수집 도구** | `signals.csv` 대신 `python3 tools/signal_api.py` 의 API 로 받는다. 인증 · 쪽 나눔 · 초당 5회 제한(429 + Retry-After) · 일시 장애(503) · 응답 지연(8초 뒤 504)이 실제처럼 일어난다. 에이전트의 도구(Tool Calling)로 부르고, 실패하면 다시 받는다 | `python3 tools/ext_check.py api <팀>` — 모든 쪽을 받았나 · 429 뒤 기다렸나 · 장애 쪽을 다시 받았나 | Tool Calling 오류 대응 · 재시도 |
+| **E2 근거 저장** | 받은 신호와 브리핑 인용을 SQLite(또는 MCP 서버 뒤의 DB)에 저장한다. 표 `evidence(signal_id, source_url, published_at)` 와 `citations(run, signal_id)` 를 둔다 | `python3 tools/ext_check.py db <db 파일> <결과 폴더>` — 브리핑의 모든 신호 번호를 원문 URL 까지 되짚을 수 있나 | MCP · DB 연동, 실행 로그 |
+| **E3 승인 후 발송** | 사람별 브리핑을 `outbox/drafts/` 에 두고, 평가관이 승인하면 `approvals/<이름>.json`(`approved_by` · `sha256` · `approved_at`)을 남긴 뒤에만 `sent/` 로 보낸다. 보낼 때 `log.jsonl` 에 `{"event":"sent","name","at"}` 를 쓴다 | `python3 tools/ext_check.py outbox <outbox 폴더>` — 승인한 그대로, 승인 뒤에만 나갔나 | Human-in-the-loop · 권한 통제 |
+| **E4 구조 선택** | 단일 에이전트 · 고정 워크플로 · 멀티 에이전트 중 하나를 골라 `trace.jsonl` 의 단계별 비용 · 시간으로 고른 이유를 발표한다. 다른 구조 하나와 비교한 숫자가 있어야 한다 | 발표 · 순위표의 비용 · 시간 | 아키텍처 Trade-off · 비용 · Latency |
+
+API 는 같은 요청에 늘 같은 일이 일어나 팀마다 공정합니다. 요청 기록은 `dev/results/api-<팀>.jsonl` 에 남습니다.
 
 ## 채점
 L1 은 직접 돌려 볼 수 있습니다.

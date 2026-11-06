@@ -215,6 +215,38 @@ class GoldenRun(unittest.TestCase):
         self.assertEqual((code, o["score"]), (1, 0))
 
 
+class Extensions(unittest.TestCase):
+    def test_api_rules(self):
+        from ext_check import check_api
+        good = [{"t": 0.0, "page": 1, "status": 503}, {"t": 1.0, "page": 1, "status": 200}, {"t": 1.1, "page": 2, "status": 429}, {"t": 2.2, "page": 2, "status": 200}]
+        self.assertTrue(check_api(good, 2)["pass"])
+        self.assertFalse(check_api(good[:-1], 2)["pass"])                       # 쪽을 덜 받음
+        self.assertFalse(check_api([good[0], good[2], {"t": 1.3, "page": 2, "status": 200}], 2)["pass"])   # 장애 쪽 미회수 · 429 무시
+    def test_outbox(self):
+        import tempfile, hashlib
+        from ext_check import check_outbox
+        with tempfile.TemporaryDirectory() as t:
+            b = Path(t); (b / "sent").mkdir(); (b / "approvals").mkdir()
+            (b / "sent/ceo.md").write_text("본문", encoding="utf-8")
+            h = hashlib.sha256("본문".encode()).hexdigest()
+            (b / "approvals/ceo.json").write_text(json.dumps({"approved_by": "평가관", "sha256": h, "approved_at": "2026-11-14T10:00:00"}), encoding="utf-8")
+            (b / "log.jsonl").write_text(json.dumps({"event": "sent", "name": "ceo", "at": "2026-11-14T10:05:00"}) + "\n", encoding="utf-8")
+            self.assertTrue(check_outbox(b)["pass"])
+            (b / "sent/ceo.md").write_text("바뀐 본문", encoding="utf-8")
+            self.assertFalse(check_outbox(b)["pass"])
+    def test_db(self):
+        import tempfile, sqlite3
+        from ext_check import check_db
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t) / "run1"; d.mkdir(); (d / "brief.md").write_text("구리 [SIG-10001] 자석 [SIG-10002]", encoding="utf-8")
+            db = Path(t) / "mi.db"; c = sqlite3.connect(db)
+            c.execute("CREATE TABLE evidence(signal_id, source_url, published_at)"); c.execute("CREATE TABLE citations(run, signal_id)")
+            c.executemany("INSERT INTO evidence VALUES(?,?,?)", [("SIG-10001", "https://a", "2026-10"), ("SIG-10002", "https://b", "2026-10")])
+            c.executemany("INSERT INTO citations VALUES(?,?)", [("run1", "SIG-10001")]); c.commit(); c.close()
+            r = check_db(db, d)
+            self.assertFalse(r["pass"]); self.assertEqual(r["not_in_citations"], ["SIG-10002"])
+
+
 class Approval(unittest.TestCase):
     def setUp(self):
         import tempfile, review_server as rs
