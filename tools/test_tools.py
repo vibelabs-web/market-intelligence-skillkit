@@ -29,6 +29,8 @@ class Brief(unittest.TestCase):
         self.assertEqual(gates("이 규제는 초안이며 시행 중인지 확인 필요합니다 [E-002]."), [])
     def test_synthetic_marked(self):
         self.assertEqual(gates("베트남 문의는 42건입니다 (synthetic).", {"42"}), [])
+    def test_internal_label(self):
+        self.assertEqual(gates("베트남 문의는 42건입니다(내부 집계).", {"42"}), [])
     def test_synthetic_unmarked(self):
         self.assertIn("G5", gates("베트남 문의는 42건입니다 [E-001].", {"42"}))
     def test_citation_after_period(self):

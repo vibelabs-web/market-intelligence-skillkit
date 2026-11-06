@@ -75,7 +75,7 @@ def md_to_html(text: str, reg: dict) -> str:
             if para: flush()
             if lst != kind:
                 if lst: out.append(f"</{lst}>")
-                out.append(f"<{kind}>"); lst = kind
+                out.append(f'<ol start="{m.group(1)}">' if kind == "ol" else "<ul>"); lst = kind
             out.append(f"<li>{inline(m.group(2), reg)}</li>"); continue
         if s.startswith(">"):
             flush(); out.append(f"<blockquote>{inline(s.lstrip('> '), reg)}</blockquote>"); continue
@@ -91,10 +91,16 @@ def csv_to_html(text: str, reg: dict) -> str:
         return "<p>(빈 파일)</p>"
     head, body = rows[0], rows[1:]
     idx = head.index("send") if "send" in head else -1
-    h = "<table><tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in head) + "</tr>"
+    eid = head.index("evidence_id") if "evidence_id" in head else -1
+    extra = ["내용", "출처 · 시점 · 상태"] if eid >= 0 and reg else []
+    h = "<table><tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in head + extra) + "</tr>"
     for r in body:
         cl = f' class="sel-{"yes" if r[idx].strip().lower() == "yes" else "no"}"' if 0 <= idx < len(r) else ""
-        h += f"<tr{cl}>" + "".join(f"<td>{inline(c, reg)}</td>" for c in r) + "</tr>"
+        cells = "".join(f"<td>{inline(c, reg)}</td>" for c in r)
+        if extra:
+            e = reg.get(r[eid].strip(), {}) if eid < len(r) else {}
+            cells += f"<td>{html.escape(e.get('claim', ''))}</td><td>{html.escape(e.get('publisher', ''))} · {html.escape(e.get('data_period') or e.get('published_at') or '')} · {html.escape(e.get('status', ''))}</td>"
+        h += f"<tr{cl}>{cells}</tr>"
     return h + "</table>"
 
 
@@ -242,6 +248,8 @@ class H(BaseHTTPRequestHandler):
                 d = run_dir(q["run"])
                 self.js({"run": q["run"], "meta": read_json(d / "run.json", {}), "files": doc_files(d), "feedback": read_feedback(d), "suggestions": read_suggestions(d),
                          "verdict": read_json(d / "verdict.json", None), "lineage": lineage(q["run"])})
+            elif u.path == "/api/evidence":
+                self.js(load_register().get(q["id"]) or {"error": "근거 묶음에 없는 번호입니다"})
             elif u.path == "/doc":
                 self.send(render_doc(run_dir(q["run"]) / safe(q["file"])))
             elif u.path == "/diff":

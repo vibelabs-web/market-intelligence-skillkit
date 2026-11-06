@@ -13,7 +13,7 @@ ID = re.compile(r"E-\d{3}")
 NUM = re.compile(r"(?<![\w.-])\d[\d,]*(?:\.\d+)?")
 FIRM = re.compile(r"시행\s*중|확정|발효|의무화(?:됐|되었)|in force|mandatory", re.I)
 HEDGE = re.compile(r"초안|검토|추진|예정|미확정|불확실|proposed|draft|가능성|확인\s*필요")
-SYN = re.compile(r"\(?\s*synthetic\s*\)?", re.I)
+SYN = re.compile(r"\(?\s*(?:synthetic|내부\s*집계|내부\s*자료)\s*\)?", re.I)
 
 
 def norm(n: str) -> str:
