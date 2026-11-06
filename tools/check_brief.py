@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""check_brief.py — 보고서를 코드로 검사한다 (G1 출처 · G2 상태 · G3 숫자 · G5 가상 표시)
+"""check_brief.py — 보고서를 코드로 검사한다 (G1 출처 · G2 상태 · G3 숫자 · G4 계산 · G5 가상 표시)
 
-  python3 tools/check_brief.py runs/r1/brief-CEO.md [--register project/fact-pack/evidence-register.csv]
+  python3 tools/check_brief.py runs/r1/brief.md [--register project/fact-pack/evidence-register.csv] [--profile project/people/ceo.md]
 
 판단이 필요한 것은 하지 않는다. 종료 코드: 문제 없음 0 · 문제 있음 1 · 입력 오류 2
 """
@@ -9,16 +9,46 @@ from __future__ import annotations
 import argparse, csv, json, re, sys
 from pathlib import Path
 
-ID = re.compile(r"[EI]-\d{3}")
+ID = re.compile(r"(?:[EI]-\d{3}|SIG-\d{5})")
 NUM = re.compile(r"(?<![\w.-])\d[\d,]*(?:\.\d+)?")
-FIRM = re.compile(r"시행\s*중|확정|발효|의무화(?:됐|되었)|in force|mandatory", re.I)
+FIRM = re.compile(r"시행\s*중|확정(?!되면|되고|돼도|될|되지|이\s*아)|발효|의무화(?:됐|되었)|in force|mandatory", re.I)
 HEDGE = re.compile(r"초안|검토|추진|예정|미확정|불확실|proposed|draft|가능성|확인\s*필요")
-CALC = re.compile(r"[=×÷≈]")   # 식을 보인 계산값은 근거와 글자 대조를 하지 않는다
+SPAN = re.compile(r"\(([^()]*[=×÷≈+−][^()]*)\)|((?:[^().;]|(?<=\d)\.(?=\d))*[=×÷≈](?:[^().;]|(?<=\d)\.(?=\d))*)")   # 식을 보인 숫자만 근거 대조에서 뺀다
+TERM = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(천만|억|만|천|%)?")
+UNIT = {"천만": 1e7, "억": 1e8, "만": 1e4, "천": 1e3, "%": 0.01, "": 1, None: 1}
 SYN = re.compile(r"\(?\s*(?:synthetic|내부\s*집계|내부\s*자료)\s*\)?", re.I)
 
 
 def norm(n: str) -> str:
-    return n.replace(",", "").rstrip(".")
+    n = n.replace(",", "").rstrip(".")
+    return n.rstrip("0").rstrip(".") if "." in n else n
+
+
+def formula_spans(s: str) -> list[str]:
+    return [a or b for a, b in SPAN.findall(s)]
+
+
+def bad_formula(span: str) -> str | None:
+    """«A × B = C» 처럼 값만으로 된 식의 답이 맞는지 본다. 날짜 · 단위가 섞인 식은 건너뛴다"""
+    if "월" in span or "일" in span or "주" in span:
+        return None
+    m = re.search(r"(.+?)\s*[=≈]\s*(.+)", span)
+    if not m:
+        return None
+    left, right = m.groups()
+    terms, ops = TERM.findall(left), re.findall(r"[×÷+]", left)
+    ans = TERM.search(right)
+    if not ans or not ops or len(terms) != len(ops) + 1:
+        return None
+    val = lambda t: float(t[0].replace(",", "")) * UNIT[t[1]]
+    got = val(terms[0])
+    for op, t in zip(ops, terms[1:]):
+        v = val(t)
+        if op == "÷" and not v:
+            return None
+        got = got * v if op == "×" else got / v if op == "÷" else got + v
+    want = val((ans.group(1), ans.group(2)))
+    return None if want and abs(got - want) / abs(want) <= 0.02 else f"계산이 맞지 않음: {span.strip()} (계산하면 약 {got:,.4g})"
 
 
 def sentences(text: str) -> list[str]:
@@ -33,7 +63,7 @@ def sentences(text: str) -> list[str]:
             s = s.strip()
             if not s:
                 continue
-            if out and fresh and re.fullmatch(r"(?:\[?E-\d{3}\]?[\s,.·]*)+", s):   # 문장 뒤에 따로 놓인 근거 표시
+            if out and fresh and re.fullmatch(r"(?:\[?(?:E-\d{3}|SIG-\d{5})\]?[\s,.·]*)+", s):   # 문장 뒤에 따로 놓인 근거 표시
                 out[-1] += " " + s
             else:
                 out.append(s)
@@ -45,19 +75,35 @@ def sentences(text: str) -> list[str]:
 def bare_numbers(s: str) -> list[str]:
     s = ID.sub(" ", s)
     s = re.sub(r"(?<![\d,.])20\d\d(?:[-./]\d{1,2}){0,2}(?!\d)", " ", s)   # 연도 · 날짜
+    s = re.sub(r"(?<![\d,.])\d{1,2}/\d{1,2}(?![\d/])", " ", s)                  # 12/1 같은 날짜
     s = re.sub(r"\d{1,2}월(?:\s*\d{1,2}일)?|\d{1,2}일|\d{1,2}분기", " ", s)     # 한글 날짜 — 숫자로 검사하지 않는다
     s = re.sub(r"\d{1,3}\s*(?:개월|주|분)\s*(?:안|내|동안|뒤|전)", " ", s)        # 기간 표현
+    s = re.sub(r"(?:최근|지난)\s*\d{1,3}\s*(?:개월|주|년)", " ", s)
+    s = re.sub(r"\b1\s*(?:건|대|인|톤|품목)당|(?<![\d,.])1건(?!\s*당)", " ", s)
+    s = re.sub(r"\d{1,2}\s*(?:개(?!국|월)|가지|단계|품목|차례)", " ", s)              # 글의 구성을 세는 수
     return [norm(m) for m in NUM.findall(s)]
 
 
-def check(text: str, rows: dict[str, dict], synthetic_values: set[str] = frozenset()) -> list[dict]:
+def check(text: str, rows: dict[str, dict], synthetic_values: set[str] = frozenset(), allowed: set[str] = frozenset()) -> list[dict]:
+    """allowed: 받는 사람의 프로필에 있어 근거 번호 없이 써도 되는 숫자"""
     issues = []
     def add(gate, sent, why):
         issues.append({"gate": gate, "sentence": sent[:160], "why": why})
-    for s in sentences(text):
-        ids = ID.findall(s)
-        nums = bare_numbers(s)
-        is_syn = bool(SYN.search(s))
+    pairs = [(s, line) for line in text.replace("**", "").splitlines() for s in sentences(line)]
+    for s, line in pairs:
+        ids = ID.findall(s) or ID.findall(line)       # 문단 끝에 몰아 적은 근거 번호도 그 문단의 근거로 본다
+        spans = formula_spans(s)
+        shown = {norm(n) for x in spans for n in bare_numbers(x)}
+        for r, x, y in re.findall(r"(\d[\d,.]*)[^\d()]{0,8}\(\s*(\d[\d,.]*)\D*?−\s*(\d[\d,.]*)\D*\)", s):   # «10주 공백(16주 − 6주)»: 맞는 뺄셈만
+            if float(x.replace(",", "")) - float(y.replace(",", "")) == float(r.replace(",", "").rstrip(".")):
+                shown.add(norm(r))
+        shown |= {n.split(".")[0] for n in shown}     # «약 26억 (26.2억 × …)» 처럼 식의 값을 줄여 쓴 경우
+        nums = [n for n in bare_numbers(s) if n not in shown and n not in allowed]
+        is_syn = bool(SYN.search(s)) and not ids      # 근거 번호가 있으면 «내부 자료»라는 말로 대조를 피하지 못한다
+        for x in spans:
+            why = bad_formula(x)
+            if why:
+                add("G4", s, why)
         for i in ids:
             if i not in rows:
                 add("G1", s, f"근거 묶음에 없는 ID {i}")
@@ -65,9 +111,9 @@ def check(text: str, rows: dict[str, dict], synthetic_values: set[str] = frozens
         if nums and not ids and not is_syn:
             add("G1", s, f"숫자 {nums} 에 근거 ID · synthetic 표시가 없음")
         if known:
-            hay = " ".join(f"{r.get('quote','')} {r.get('claim','')}" for r in known).replace(",", "")
+            hay = {norm(n) for n in NUM.findall(" ".join(f"{r.get('quote','')} {r.get('claim','')}" for r in known))}
             for n in nums:
-                if n not in hay and not is_syn and not CALC.search(s):
+                if n not in hay and not is_syn:
                     add("G3", s, f"숫자 {n} 이 인용한 근거에 없음")
             if any(r.get("status") in ("proposed", "uncertain") for r in known) and FIRM.search(s) and not HEDGE.search(s):
                 add("G2", s, "검토 · 불확실 근거를 확정처럼 씀")
@@ -94,6 +140,7 @@ def main() -> int:
     ap.add_argument("brief")
     ap.add_argument("--register", default="project/fact-pack/evidence-register.csv")
     ap.add_argument("--synthetic", default="", help="쉼표로 구분한 가상 수치 (예: 42,27,18)")
+    ap.add_argument("--profile", help="받는 사람 프로필 — 여기 있는 숫자는 근거 번호 없이 쓸 수 있다")
     a = ap.parse_args()
     try:
         text = Path(a.brief).read_text(encoding="utf-8")
@@ -101,7 +148,8 @@ def main() -> int:
     except OSError as e:
         print(f"입력 오류: {e}", file=sys.stderr)
         return 2
-    issues = check(text, rows, {norm(x) for x in a.synthetic.split(",") if x})
+    allowed = {norm(n) for n in NUM.findall(Path(a.profile).read_text(encoding="utf-8"))} if a.profile else frozenset()
+    issues = check(text, rows, {norm(x) for x in a.synthetic.split(",") if x}, allowed)
     sel = Path(a.brief).with_name("selection.csv")
     if sel.exists():
         with open(sel, encoding="utf-8", newline="") as f:

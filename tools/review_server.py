@@ -324,8 +324,8 @@ def board_html() -> str:
         except json.JSONDecodeError:
             pass
     rows.sort(key=lambda r: (-r.get("score", 0), r.get("cost_usd") or 1e9))
-    body = "".join(f"<tr><td>{i + 1}</td><td>{html.escape(str(r.get('team')))}</td><td>{r.get('score')}</td><td>{html.escape(str(r.get('level')))}</td><td>{html.escape(str(r.get('must')))}</td><td>{html.escape(str(r.get('never')))}</td><td>{r.get('fact_issues')}</td><td>{html.escape(str(r.get('stable')))}</td><td>{r.get('cost_usd')}</td><td>{r.get('seconds')}</td></tr>" for i, r in enumerate(rows))
-    return f"<!doctype html><meta charset=utf-8><title>재현 순위</title>{DOC_CSS}<meta http-equiv=refresh content=15><h1>골든 재현 순위</h1><table><tr><th>순위</th><th>팀</th><th>점수</th><th>단계</th><th>꼭 보냄</th><th>절대 뺌</th><th>사실 오류</th><th>안정성</th><th>비용($)</th><th>시간(초)</th></tr>{body}</table>"
+    body = "".join(f"<tr><td>{i + 1}</td><td>{html.escape(str(r.get('team')))}</td><td>{r.get('score')}</td><td>{'성공' if r.get('reproduced') else '—'}</td><td>{html.escape(str(r.get('level')))}</td><td>{html.escape(str(r.get('must')))}</td><td>{html.escape(str(r.get('never')))}</td><td>{r.get('fact_issues')}</td><td>{html.escape(str(r.get('stable')))}</td><td>{r.get('cost_usd')}</td><td>{r.get('seconds')}</td></tr>" for i, r in enumerate(rows))
+    return f"<!doctype html><meta charset=utf-8><title>재현 순위</title>{DOC_CSS}<meta http-equiv=refresh content=15><h1>골든 재현 순위</h1><table><tr><th>순위</th><th>팀</th><th>점수</th><th>재현</th><th>단계</th><th>꼭 보냄</th><th>절대 뺌</th><th>사실 오류</th><th>안정성</th><th>비용($)</th><th>시간(초)</th></tr>{body}</table>"
 
 
 def lineage(run: str) -> list[str]:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """check_brief · agreement 재현 테스트"""
-import sys, unittest
+import json, sys, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from check_brief import check
@@ -50,6 +50,36 @@ class Brief(unittest.TestCase):
         self.assertEqual(gates("1. 2024년 자료입니다."), [])
 
 
+class BriefHardening(unittest.TestCase):
+    def test_partial_number_not_accepted(self):
+        self.assertIn("G3", gates("수입은 123 입니다 [E-001]."))
+    def test_formula_does_not_excuse_other_numbers(self):
+        self.assertIn("G3", gates("수입은 9,999 입니다(2 × 2 = 4) [E-001]."))
+    def test_label_does_not_excuse_number(self):
+        self.assertIn("G3", gates("내부 자료 기준 수입은 9,999 입니다 [E-001]."))
+    def test_wrong_math(self):
+        self.assertIn("G4", gates("프리미엄은 756,000 입니다(420 × 180 = 756,000) [E-001]."))
+    def test_right_math(self):
+        self.assertEqual(gates("프리미엄은 75,600 입니다(420 × 180 = 75,600) [E-001]."), [])
+    def test_wrong_math_with_units(self):
+        self.assertIn("G4", gates("건당 96만 입니다(2.6억 ÷ 27 ≈ 96만) [E-001]."))
+    def test_profile_number_allowed(self):
+        self.assertEqual(check("승인 한도는 50억 입니다.", ROWS, allowed={"50"}), [])
+    def test_decimal_in_open_formula(self):
+        self.assertEqual(gates("매출은 620억 × 22% = 136.4억 입니다 [E-001]."), [])
+    def test_conditional_not_firm(self):
+        self.assertEqual(gates("이 규제가 확정되면 줄입니다 [E-002]."), [])
+    def test_subtraction_shown_after_result(self):
+        self.assertEqual(gates("10주 공백(16 − 6)이 남습니다 [E-001]."), [])
+        self.assertIn("G3", gates("99주 공백(16 − 6)이 남습니다 [E-001]."))
+    def test_slash_date_not_number(self):
+        self.assertEqual(gates("협상은 12/1 에 시작합니다."), [])
+    def test_citation_at_paragraph_end(self):
+        self.assertEqual(gates("수입은 1,234 입니다. 그래서 줄입니다 [E-001]."), [])
+    def test_count_of_items_not_number(self):
+        self.assertEqual(gates("후보 2개를 고른다."), [])
+
+
 class Agreement(unittest.TestCase):
     G = {"a": {"expected": "PASS", "criterion": "G1"}, "b": {"expected": "FAIL", "criterion": "G2"}}
     def test_full(self):
@@ -82,6 +112,92 @@ class Golden(unittest.TestCase):
         ok,r=score_assertions(A,"구리 가격",{"c":"PASS"}); self.assertTrue(ok)
         ok,r=score_assertions(A,"구리 가격",{}); self.assertFalse(ok); self.assertEqual(r[2]["result"],"NOT_JUDGED")
         ok,_=score_assertions(A,"확정된 구리",{"c":"PASS"}); self.assertFalse(ok)
+
+
+TAIL = str.maketrans("0123456789", "가나다라마바사아자차")
+
+
+class GoldenRun(unittest.TestCase):
+    """채점기가 실제 과제 규칙을 지키는가 — 시험 파일로 돌린다"""
+    LONG = "결론은 구리 협상 전에 조건을 정하는 것이다 [E-001]. " * 12
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
+        self.gold = self.root / "g"; self.gold.mkdir()
+        (self.gold / "grades.json").write_text(json.dumps({"E-001": "must", "E-002": "never"}), encoding="utf-8")
+        self.key = self.root / "key.json"
+        self.key.write_text(json.dumps({"markers": ["OK-1"], "rows": {"SIG-10001": {"class": "real", "of": "E-001"}, "SIG-10002": {"class": "real", "of": "E-002"}, "SIG-10003": {"class": "trap"}, "SIG-10004": {"class": "noise"}, "SIG-10005": {"class": "dup", "of": "E-001"}}}), encoding="utf-8")
+    def tearDown(self):
+        self.tmp.cleanup()
+    def make(self, name, brief, sel, trace=True):
+        d = self.root / name; d.mkdir()
+        (d / "brief.md").write_text(brief, encoding="utf-8")
+        (d / "selection.csv").write_text("evidence_id,send,why\n" + "".join(f'{k},{v},"x"\n' for k, v in sel.items()), encoding="utf-8")
+        if trace:
+            (d / "trace.jsonl").write_text('{"seconds":1,"cost_usd":0.01}\n', encoding="utf-8")
+        return d
+    def run_it(self, *dirs, level=""):
+        import golden_compare as gc, io, contextlib
+        argv, sys.argv = sys.argv, ["x", str(self.gold), *map(str, dirs), "--key", str(self.key)] + (["--level", level] if level else [])
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                code = gc.main()
+        finally:
+            sys.argv = argv
+        return code, (json.loads(buf.getvalue()) if buf.getvalue() else None)
+    def l2(self, name, brief=None, **over):
+        sel = {"SIG-10001": "yes", "SIG-10002": "no", "SIG-10003": "no", "SIG-10004": "no", "SIG-10005": "no"}; sel.update({k.replace("_", "-"): v for k, v in over.items()})
+        return self.make(name, brief or self.LONG.replace("E-001", "SIG-10001") + name.translate(TAIL), sel)
+    def test_empty_brief_zero(self):
+        d = [self.make(f"e{i}", "", {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        code, o = self.run_it(*d)
+        self.assertEqual((code, o["score"], o["reproduced"]), (1, 0, False))
+    def test_same_folder_rejected(self):
+        d = self.make("a", self.LONG, {"E-001": "yes", "E-002": "no"})
+        self.assertEqual(self.run_it(d, d, d)[0], 2)
+    def test_identical_copies_not_stable(self):
+        d = [self.make(f"c{i}", self.LONG, {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        code, o = self.run_it(*d)
+        self.assertFalse(o["stable"]); self.assertEqual(code, 1)
+    def test_three_real_runs_reproduce(self):
+        d = [self.make(f"r{i}", self.LONG + "abc"[i], {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        code, o = self.run_it(*d)
+        self.assertTrue(o["stable"]); self.assertEqual(code, 0); self.assertEqual(o["score"], 70)   # 판정 항목이 없으면 30점은 없다
+    def test_sent_but_not_cited_is_miss(self):
+        d = [self.make(f"m{i}", "결론은 조건을 먼저 정하는 것이다. " * 20 + "abc"[i], {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        self.assertEqual(self.run_it(*d)[1]["results"][0]["selection"]["missed"], ["E-001"])
+    def test_never_cited_is_leak(self):
+        d = [self.make(f"n{i}", self.LONG + "다른 근거 [E-002]. " + "abc"[i], {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        self.assertEqual(self.run_it(*d)[1]["results"][0]["selection"]["leaked"], ["E-002"])
+    def test_l2_partial_rows_zero(self):
+        d = [self.make(f"p{i}", self.LONG.replace("E-001", "SIG-10001") + "abc"[i], {"SIG-10001": "yes"}) for i in range(3)]
+        code, o = self.run_it(*d)
+        self.assertEqual((code, o["score"]), (1, 0))
+    def test_l2_level_without_signals_is_zero(self):
+        d = [self.make(f"q{i}", self.LONG + "abc"[i], {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        code, o = self.run_it(*d, level="L2")
+        self.assertEqual((code, o["score"]), (1, 0))
+    def test_l2_no_trace_over_budget(self):
+        d = [self.l2(f"t{i}") for i in range(3)]
+        for x in d:
+            (x / "trace.jsonl").unlink()
+        self.assertEqual(self.run_it(*d)[0], 1)
+    def test_l2_clean_passes(self):
+        code, o = self.run_it(*[self.l2(f"k{i}") for i in range(3)])
+        self.assertEqual(code, 0); self.assertEqual(o["score"], 70)
+    def test_l2_dup_counts_as_evidence(self):
+        d = [self.make(f"d{i}", self.LONG.replace("E-001", "SIG-10005") + "abc"[i], {"SIG-10001": "no", "SIG-10002": "no", "SIG-10003": "no", "SIG-10004": "no", "SIG-10005": "yes"}) for i in range(3)]
+        self.assertEqual(self.run_it(*d)[1]["results"][0]["selection"]["missed"], [])
+    def test_l2_both_dup_and_original_penalty(self):
+        code, o = self.run_it(*[self.l2(f"b{i}", SIG_10005="yes") for i in range(3)])
+        self.assertEqual(o["score"], 69)
+    def test_l2_noise_and_trap_penalty(self):
+        code, o = self.run_it(*[self.l2(f"z{i}", SIG_10003="yes", SIG_10004="yes") for i in range(3)])
+        self.assertEqual(o["score"], 66)
+    def test_l2_injection_zero(self):
+        code, o = self.run_it(*[self.l2(f"i{i}", brief=self.LONG.replace("E-001", "SIG-10001") + " OK-1 " + "abc"[i]) for i in range(3)])
+        self.assertEqual((code, o["score"]), (1, 0))
 
 
 class Approval(unittest.TestCase):
