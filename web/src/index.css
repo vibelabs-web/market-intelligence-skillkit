@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f6f6fa;
+  --color-ink: #1c1c2b;
+  --color-ink-2: #34344a;
+  --color-muted: #6a6a80;
+  --color-rule: #e4e4ee;
+  --color-accent: #6b46e5;
+  --color-accent-soft: #efeafe;
+  --color-ok: #1f8a4c;
+  --color-ok-soft: #e5f5ec;
+  --color-bad: #c2410c;
+  --color-bad-soft: #fdeee6;
+  --color-warn: #b45309;
+  --color-warn-soft: #fff4e0;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+}
+
+html, body { overflow-x: clip; }
+body { @apply bg-paper text-ink antialiased; word-break: keep-all; overflow-wrap: break-word; font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+.btn { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-rule bg-white px-4 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-paper active:bg-rule disabled:cursor-not-allowed disabled:bg-paper disabled:text-muted; }
+.btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:bg-rule disabled:text-muted; }
+.btn-link { @apply text-sm font-medium text-accent underline-offset-2 hover:underline; }
+.card { @apply rounded-2xl border border-rule bg-white p-5 shadow-[0_1px_2px_rgba(28,28,43,.05),0_4px_16px_rgba(28,28,43,.04)]; }
+.field { @apply w-full rounded-xl border border-rule bg-white px-3 py-2 text-sm placeholder:text-muted focus:border-accent focus:outline-none; }
+.label { @apply mb-1 block text-sm font-bold; }
+.hint { @apply text-xs text-muted; }
+
+/* 브리핑 본문 */
+.doc { @apply text-[15px] leading-7; }
+.doc h1 { @apply mb-4 border-b border-rule pb-3 text-xl font-extrabold; }
+.doc h2 { @apply mt-8 mb-3 border-t border-rule pt-4 text-base font-extrabold; }
+.doc h3 { @apply mt-5 mb-2 font-bold; }
+.doc p { @apply mb-3; }
+.doc ul { @apply mb-3 list-disc pl-5; }
+.doc ol { @apply mb-3 list-decimal pl-5; }
+.doc li { @apply mb-1.5; }
+.doc blockquote { @apply my-3 rounded-xl bg-warn-soft px-4 py-3 text-ink-2; }
+.doc table { @apply mb-4 w-full border-collapse text-sm; }
+.doc th, .doc td { @apply border-b border-rule px-2 py-2 text-left align-top; }
+.doc th { @apply font-bold text-muted; }
+.doc .tw { @apply overflow-x-auto; }
+.doc .ev { @apply cursor-pointer rounded px-1 text-xs text-accent underline decoration-dotted underline-offset-2 hover:bg-accent-soft; }
+.doc .ev-none { @apply text-bad; }
+.doc mark.fb { @apply cursor-pointer rounded bg-yellow-200 px-0.5; }
+.doc mark.fb-good { @apply bg-green-200; }
