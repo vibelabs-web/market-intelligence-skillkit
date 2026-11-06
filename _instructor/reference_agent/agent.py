@@ -7,7 +7,7 @@
 LLM 은 llm() 한 곳에서만 부른다. 지금은 claude CLI 이고, API 로 바꾸려면 이 함수만 고친다.
 """
 from __future__ import annotations
-import argparse, csv, json, re, subprocess, sys, tempfile, time
+import argparse, concurrent.futures as cf, csv, json, re, subprocess, sys, tempfile, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -76,25 +76,36 @@ def main() -> int:
             decide[r["evidence_id"]] = ("no", "자료 안에 AI 에 대한 지시가 있어 격리함")
         else:
             clean.append(r)
-    # 2. 값싼 모델: 묶음으로 1차 분류
+    # 2-1. 코드: 이 회사의 품목 · 지역 · 공급망 단어가 없는 자료는 모델을 부르지 않는다
+    TOPIC = re.compile(r"모터|전동기|motor|HS ?85|구리|copper|희토류|rare|자석|magnet|관세|tariff|세율|FTA|CEPA|인증|TISI|TIS |라벨|MEPS|물류|LPI|FDI|공장|제조", re.I)
+    PLACE = re.compile(r"베트남|태국|Vietnam|Thai|아세안|ASEAN|중국|China|세계|global", re.I)
+    rest = []
+    for r in clean:
+        s = r.get("claim", "")
+        if TOPIC.search(s) and (PLACE.search(s) or r.get("country") in ("VN", "TH", "both", "global")) and not s.startswith("(재인용)"):
+            rest.append(r)
+        else:
+            decide[r["evidence_id"]] = ("no", "품목 · 지역 관련 단어가 없거나 재인용이라 코드에서 제외")
+    # 2-2. 값싼 모델: 묶음을 병렬로 1차 분류
     cand = []
-    for i in range(0, len(clean), 40):
-        chunk = clean[i:i + 40]
-        ans = ag.json_list("1차 분류", CHEAP, f"""{GUARD}
-회사: 국내 산업용 모터 제조사의 베트남 · 태국 진출. 받는 사람의 프로필:
+    def classify(chunk):
+        return chunk, ag.json_list("1차 분류", CHEAP, f"""{GUARD}
+회사: 국내 산업용(저 · 고압 3상) 모터 제조사의 베트남 · 태국 진출. 받는 사람의 프로필:
 {profile}
-각 자료가 이 사람의 결정이나 «놀라고 싶지 않은 것»에 관련될 수 있으면 keep. 다른 업종 · 다른 나라 · 근거 없는 일반론이면 drop. 애매하면 keep.
+keep 기준: 이 회사 제품 · 공급망 · 결정에 직접 닿는가. 다른 품목(가전 · 소형 · 장난감 · 드론)의 규제와 시장, 지난 자료, 주가, 행사, 일반론은 drop. 원문 수치가 있는 공식 자료는 애매하면 keep.
 JSON 배열만 출력: [{{"id":"...","keep":true,"why":"짧게"}}]
 <data>
 {chr(10).join(line(r) for r in chunk)}
 </data>""")
-        keep = {str(x.get("id")): x for x in ans}
-        for r in chunk:
-            x = keep.get(r["evidence_id"])
-            if x and x.get("keep"):
-                cand.append(r)
-            else:
-                decide[r["evidence_id"]] = ("no", (x or {}).get("why") or "1차 분류에서 제외")
+    with cf.ThreadPoolExecutor(6) as ex:
+        for chunk, ans in ex.map(classify, [rest[i:i + 80] for i in range(0, len(rest), 80)]):
+            keep = {str(x.get("id")): x for x in ans}
+            for r in chunk:
+                x = keep.get(r["evidence_id"])
+                if x and x.get("keep"):
+                    cand.append(r)
+                else:
+                    decide[r["evidence_id"]] = ("no", (x or {}).get("why") or "1차 분류에서 제외")
     # 3. 좋은 모델: 최종 선별
     ans = ag.json_list("최종 선별", GOOD, f"""{GUARD}
 받는 사람의 프로필:
@@ -135,7 +146,7 @@ JSON 배열만 출력: [{{"id":"...","keep":true,"why":"짧게"}}]
 {internal}
 </data>"""
     text = ""
-    for attempt in range(3):
+    for attempt in range(2):                          # 재시도는 한 번 — 예산 안에서 끝낸다
         text = ag.llm("브리핑", GOOD, prompt)
         issues = check(text, known)
         ag.trace.append({"step": "코드 검사", "attempt": attempt, "seconds": 0, "cost_usd": 0, "issues": len(issues)})
