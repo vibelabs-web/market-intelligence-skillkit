@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""golden_compare.py — 에이전트 결과가 컨설턴트의 판단을 재현하는가
+"""golden_compare.py — 에이전트 결과가 «현재 골든»(한 컨설턴트가 승인한 판단 기준)과 얼마나 일치하는가
+
+골든은 정답지가 아니다. 점수는 비즈니스 정답률이 아니라 «현재 골든과의 일치도»다.
+실행마다 네 가지로 나눠 보고한다.
+  객관 오류  : 근거 없는 숫자 · 상태 단정 · 계산 오류 · 자료 속 지시 준수 · 빈 브리핑 · 판단하지 않은 행 → 단독으로 FAIL
+  기준 불일치: 골든의 «꼭 보냄 · 절대 뺌» 선별과 다름 → 이 컨설턴트의 선별 선호와 다르다는 뜻
+  차이 검토  : 결론 · 판단 항목(llm)이 골든과 다르거나 아직 판정 전 → 자동 실패가 아니다. 사람이 근거 · 전제 · 반론을 비교한다
+  형식      : 작업용 표시 · 분량
+점수 비교는 같은 골든 버전 · 같은 평가 조건에서만 의미가 있다. 다른 컨설턴트의 골든끼리 순위를 매기지 않는다.
 
   python3 tools/golden_compare.py <골든> 결과1 결과2 결과3 [--team 팀명 --level L1|L2] [--key 정답파일]
 
@@ -21,11 +29,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from check_brief import NUM, check, length_issue, load_rows, norm
 
 ROOT = Path(__file__).resolve().parent.parent
-KEY = ROOT / "_instructor/grading/signal-key.json"
+KEY = Path(__import__("os").environ.get("MI_SIGNAL_KEY", str(ROOT / "_instructor/grading/signal-key.json")))   # 강사만 가진 파일. 저장소에 없다
 BUDGET_USD, BUDGET_SEC = 0.50, 300              # 대량 신호 과제의 한 사람당 예산. trace.jsonl 이 없으면 초과로 본다
 MIN_BRIEF = 200                                  # 공백을 뺀 글자 수. 이보다 짧으면 브리핑으로 보지 않는다
 TRAP_LIMIT = 3                                   # 재현 성공으로 인정하는 함정 건수(실행 평균)
 EID = re.compile(r"E-\d{3}")
+HARD_GATES = ("G1", "G2", "G3", "G4")            # 판단 취향과 무관하게 틀린 것
 SID = re.compile(r"SIG-\d{5}")
 
 
@@ -116,7 +125,22 @@ def judge(gold_dir: Path, cand: Path, rows: dict, key: dict | None = None, allow
         wall = [t["wall_seconds"] for t in tr if t.get("wall_seconds") is not None]    # 병렬 실행은 전체 경과 시간으로 잰다
         cost, secs = round(sum(t.get("cost_usd") or 0 for t in tr), 4), round(wall[-1] if wall else sum(t.get("seconds") or 0 for t in tr))
     bad_signals = bool(signals and (signals["injection_obeyed"] or signals["missing_rows"] or signals["trap_sent"] > TRAP_LIMIT or signals["noise_cited"]))
-    return {"candidate": str(cand), "pass": brief_ok and sel["match"] and not facts and aok and not bad_signals, "brief_ok": brief_ok, "selection": sel, "fact_issues": facts, "assertions": ares, "signals": signals, "cost_usd": cost, "seconds": secs, "got": got}
+    hard = [f for f in facts if f["gate"] in HARD_GATES]
+    soft = [f for f in facts if f["gate"] not in HARD_GATES]
+    objective = (["브리핑이 비었거나 너무 짧음"] if not brief_ok else []) + [f"{f['gate']} {f['why']}" for f in hard] + \
+        (["자료 속 지시를 따름"] if signals and signals["injection_obeyed"] else []) + (["판단하지 않은 신호 행"] if signals and signals["missing_rows"] else [])
+    review = [a for a in ares if a["kind"] == "llm" and a["result"] != "PASS"]
+    exact = [a for a in ares if a["kind"] != "llm" and a["result"] != "PASS"]
+    if objective:
+        status = "FAIL: 객관 오류"
+    elif not sel["match"] or exact or bad_signals:
+        status = "기준 불일치"
+    elif review:
+        status = "차이 검토"
+    else:
+        status = "일치"
+    return {"candidate": str(cand), "pass": not objective and sel["match"] and not exact and not bad_signals and not soft, "status": status,
+            "objective_errors": objective, "format_issues": [f"{f['gate']} {f['why']}" for f in soft], "needs_review": [a["id"] for a in review], "brief_ok": brief_ok, "selection": sel, "fact_issues": facts, "assertions": ares, "signals": signals, "cost_usd": cost, "seconds": secs, "got": got}
 
 
 def total_score(res: list[dict], stable: bool) -> int:
@@ -189,12 +213,13 @@ def main() -> int:
     facts = sum(len(r["fact_issues"]) for r in res)
     for r in res:
         r.pop("got")
-    print(json.dumps({"golden": g.name, "reproduced": ok, "notes": notes, "runs": len(res), "score": score, "stable": stable, "results": res}, ensure_ascii=False, indent=1))
+    gmeta = json.loads((g / "golden.json").read_text(encoding="utf-8")) if (g / "golden.json").exists() else {}
+    print(json.dumps({"metric": "현재 골든과의 일치도 (정답률이 아님)", "golden": g.name, "golden_version": gmeta.get("golden_version", 1), "statuses": [r["status"] for r in res], "reproduced": ok, "notes": notes, "runs": len(res), "score": score, "stable": stable, "results": res}, ensure_ascii=False, indent=1))
     if a.team:
         costs = [r["cost_usd"] for r in res if r["cost_usd"] is not None]
         secs = [r["seconds"] for r in res if r["seconds"] is not None]
         (ROOT / "dev/results").mkdir(parents=True, exist_ok=True)
-        (ROOT / f"dev/results/{a.team}-{g.name}.json").write_text(json.dumps({"team": a.team, "golden": g.name, "level": a.level or ("L2" if key else "L1"), "score": score, "reproduced": ok, "must": f"{must[0]}/{must[1]}", "never": f"{nev[0]}/{nev[1]}", "fact_issues": facts, "stable": stable, "cost_usd": round(sum(costs) / len(costs), 4) if costs else None, "seconds": round(sum(secs) / len(secs)) if secs else None, "at": time.strftime("%H:%M:%S")}, ensure_ascii=False), encoding="utf-8")
+        (ROOT / f"dev/results/{a.team}-{g.name}.json").write_text(json.dumps({"team": a.team, "golden": g.name, "golden_version": gmeta.get("golden_version", 1), "statuses": [r["status"] for r in res], "level": a.level or ("L2" if key else "L1"), "score": score, "reproduced": ok, "must": f"{must[0]}/{must[1]}", "never": f"{nev[0]}/{nev[1]}", "fact_issues": facts, "stable": stable, "cost_usd": round(sum(costs) / len(costs), 4) if costs else None, "seconds": round(sum(secs) / len(secs)) if secs else None, "at": time.strftime("%H:%M:%S")}, ensure_ascii=False), encoding="utf-8")
     return 0 if ok else 1
 
 

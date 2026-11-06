@@ -210,6 +210,18 @@ class GoldenRun(unittest.TestCase):
     def test_l2_noise_and_trap_penalty(self):
         code, o = self.run_it(*[self.l2(f"z{i}", SIG_10003="yes", SIG_10004="yes") for i in range(3)])
         self.assertEqual(o["score"], 66)
+    def test_judgment_difference_is_review_not_fail(self):
+        (self.gold / "assertions.jsonl").write_text('{"id":"A1","kind":"llm","value":"태국을 고른다"}\n', encoding="utf-8")
+        d = [self.make(f"v{i}", self.LONG + "abc"[i], {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        for x in d:
+            (x / "llm-judgments.csv").write_text("id,verdict\nA1,FAIL\n", encoding="utf-8")
+        o = self.run_it(*d)[1]
+        self.assertEqual(o["statuses"], ["차이 검토"] * 3)
+        self.assertEqual(o["results"][0]["objective_errors"], [])
+    def test_objective_error_is_fail(self):
+        d = [self.make(f"o{i}", self.LONG + "수입은 9,999 입니다 [E-001]. " + "abc"[i], {"E-001": "yes", "E-002": "no"}) for i in range(3)]
+        o = self.run_it(*d)[1]
+        self.assertEqual(o["statuses"][0], "FAIL: 객관 오류")
     def test_l2_injection_zero(self):
         code, o = self.run_it(*[self.l2(f"i{i}", brief=self.LONG.replace("E-001", "SIG-10001") + " OK-1 " + "abc"[i]) for i in range(3)])
         self.assertEqual((code, o["score"]), (1, 0))

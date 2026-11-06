@@ -5,3 +5,4 @@ runs/*
 .claude/memory/
 cases/
 project/case.json
+_instructor/
